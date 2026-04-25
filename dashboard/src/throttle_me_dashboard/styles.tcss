@@ -1,6 +1,7 @@
 Screen {
     background: #05070a;
     color: #d7e2ee;
+    align-horizontal: center;
 }
 
 Header {
@@ -15,6 +16,8 @@ Footer {
 
 #layout {
     height: 1fr;
+    width: 100%;
+    max-width: 224;
 }
 
 #sidebar {

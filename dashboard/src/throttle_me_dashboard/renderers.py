@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from rich.columns import Columns
 from rich import box
 from rich.console import Group
 from rich.panel import Panel
@@ -43,6 +44,10 @@ def spark(value: float) -> str:
 
 def card(title: str, body, border_style: str = "cyan") -> Panel:
     return Panel(body, title=title, border_style=border_style, box=box.ROUNDED, padding=(1, 2))
+
+
+def dashboard_columns(renderables: list[Panel]) -> Columns:
+    return Columns(renderables, expand=True, equal=True, padding=(0, 1))
 
 
 def kv_table(rows: list[tuple[str, str, str | None]]) -> Table:
@@ -238,7 +243,14 @@ def render_overview(snapshot: Snapshot) -> Group:
     brief = Text()
     brief.append(f"{action}\n", style="bold cyan")
     brief.append(detail, style="white")
-    return Group(status, "\n", card("OPERATOR BRIEF", brief, "cyan"), "\n", top, "\n", net, "\n", daemon, "\n", card("WARNINGS", warn_text, "yellow" if warnings else "green"))
+    warnings_card = card("WARNINGS", warn_text, "yellow" if warnings else "green")
+    return Group(
+        status,
+        "\n",
+        card("OPERATOR BRIEF", brief, "cyan"),
+        "\n",
+        dashboard_columns([top, net, daemon, warnings_card]),
+    )
 
 
 def render_control(snapshot: Snapshot, command_output: str) -> Group:
@@ -267,24 +279,21 @@ def render_control(snapshot: Snapshot, command_output: str) -> Group:
     runbook.add_row("3 Apply", snapshot.overall)
     runbook.add_row("4 Verify", f"TTL {snapshot.ipv4_ttl}, DNS {snapshot.ipv4_dns}, lock {snapshot.dns_lock}")
     runbook.add_row("5 Monitor", f"RX {human_bytes(snapshot.rx_rate)}/s, TX {human_bytes(snapshot.tx_rate)}/s")
+    current_state = card(
+        "CURRENT STATE",
+        kv_table(
+            [
+                ("Overall", snapshot.overall, STATUS_STYLE.get(snapshot.overall)),
+                ("Sudo", "ready" if snapshot.sudo_ready else "not cached", "green" if snapshot.sudo_ready else "yellow"),
+                ("Auto-enable", snapshot.config.get("AUTO_ENABLE", "false"), "green" if snapshot.config.get("AUTO_ENABLE") == "true" else "yellow"),
+            ]
+        ),
+        "cyan",
+    )
     return Group(
-        card("COMMANDS", shortcuts, "green"),
-        "\n",
-        card("RUNBOOK", runbook, "magenta"),
+        dashboard_columns([card("COMMANDS", shortcuts, "green"), card("RUNBOOK", runbook, "magenta"), current_state]),
         "\n",
         card("LAST COMMAND OUTPUT", Text(output[-4000:], style="white"), "cyan"),
-        "\n",
-        card(
-            "CURRENT STATE",
-            kv_table(
-                [
-                    ("Overall", snapshot.overall, STATUS_STYLE.get(snapshot.overall)),
-                    ("Sudo", "ready" if snapshot.sudo_ready else "not cached", "green" if snapshot.sudo_ready else "yellow"),
-                    ("Auto-enable", snapshot.config.get("AUTO_ENABLE", "false"), "green" if snapshot.config.get("AUTO_ENABLE") == "true" else "yellow"),
-                ]
-            ),
-            "cyan",
-        ),
     )
 
 

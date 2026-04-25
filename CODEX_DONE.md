@@ -6,9 +6,9 @@
 ## Changes Made
 
 - `dashboard/src/throttle_me_dashboard/app.py` - Replaced `push_screen_wait` confirmations with callback-safe modal handling; added native command palette commands, live config editing, profile saves, doctor action, command history, repeat-last, command busy guard, and responsive side-panel behavior.
-- `dashboard/src/throttle_me_dashboard/renderers.py` - Added smart next-action/readiness/profile logic, status strip, inspector, doctor report, operator brief, command runbook, and safer clipped display text.
-- `dashboard/src/throttle_me_dashboard/styles.tcss` - Reworked the dashboard into a denser command-center layout with compact controls, right-side inspector/config rail, flatter buttons, and cleaner modal sizing.
-- `dashboard/tests/test_app.py` - Added Textual regression coverage for confirmation cancel, command dispatch, config validation, responsive layout, busy command blocking, and repeat-last behavior.
+- `dashboard/src/throttle_me_dashboard/renderers.py` - Added smart next-action/readiness/profile logic, status strip, inspector, doctor report, operator brief, command runbook, safer clipped display text, and wide-screen dashboard columns.
+- `dashboard/src/throttle_me_dashboard/styles.tcss` - Reworked the dashboard into a denser command-center layout with compact controls, right-side inspector/config rail, flatter buttons, cleaner modal sizing, and a 224-column max shell width for ultra-wide terminals.
+- `dashboard/tests/test_app.py` - Added Textual regression coverage for confirmation cancel, command dispatch, config validation, responsive layout, ultra-wide width capping, busy command blocking, and repeat-last behavior.
 - `PRODUCT_ANALYSIS.md` - Updated feature gap analysis, UX evaluation, current tech-debt metrics, shellcheck status, dashboard research notes, roadmap, health scorecard, and sources.
 - Installed runtime - Synced the updated dashboard into `~/.local/share/throttle-me/dashboard` so plain `throttle-me` uses the new command center.
 
@@ -32,6 +32,7 @@ tmux new-session -d -s throttle-me-round1 -x 170 -y 52 'throttle-me'
 tmux new-session -d -s throttle-me-round2 -x 170 -y 52 'throttle-me'
 tmux new-session -d -s throttle-me-round3 -x 170 -y 52 'throttle-me'
 tmux resize-window -t throttle-me-round3 -x 120 -y 36
+tmux new-session -d -s throttle-me-wide-fix -x 360 -y 58 'throttle-me'
 ```
 
 ## Next Steps
@@ -48,4 +49,6 @@ tmux resize-window -t throttle-me-round3 -x 120 -y 36
 
 The original crash path was caused by using `push_screen_wait(... wait_for_dismiss=True)` from a normal action instead of a worker. The new flow uses `push_screen(..., callback=...)`, and tmux confirmed `s` opens the daemon-start confirmation without crashing.
 
-Three requested iteration rounds were completed. Each round included interaction depth, visual/ergonomic polish, reliability/edge-case hardening, and a real `throttle-me` tmux run afterward. Final verification passed with `11 passed`, clean shellcheck, dashboard smoke from both local and installed commands, and responsive tmux capture at 120 columns.
+Three requested iteration rounds were completed. Each round included interaction depth, visual/ergonomic polish, reliability/edge-case hardening, and a real `throttle-me` tmux run afterward. Final verification passed with clean shellcheck, dashboard smoke from both local and installed commands, and responsive tmux capture at 120 columns.
+
+After Tyler showed an ultra-wide terminal capture, the dashboard was tightened again: the shell is now capped at 224 columns and Overview uses a two-by-two evidence grid instead of stretching each panel across the whole terminal. The latest dashboard test run passed with `12 passed`, and a 360-column tmux capture confirmed the runaway horizontal whitespace is gone.

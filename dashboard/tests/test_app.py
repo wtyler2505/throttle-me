@@ -75,6 +75,17 @@ def test_responsive_layout_hides_rightbar_on_narrow_terminal() -> None:
     run_async(scenario())
 
 
+def test_ultra_wide_layout_is_width_capped() -> None:
+    async def scenario() -> None:
+        app = CommandCenterApp()
+        async with app.run_test(size=(360, 58)):
+            app.render_current()
+            assert app.query_one("#layout").region.width <= 224
+            assert app.query_one("#rightbar").display is True
+
+    run_async(scenario())
+
+
 def test_busy_command_is_blocked_without_starting_worker() -> None:
     async def scenario() -> None:
         app = CommandCenterApp()
