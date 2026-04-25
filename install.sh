@@ -1,6 +1,7 @@
 #!/bin/bash
 # throttle-me Installation Script
 # Automated installation with dependency checks and configuration
+# shellcheck disable=SC2310
 
 set -euo pipefail
 
@@ -11,10 +12,10 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Installation paths
-INSTALL_DIR="$HOME/.local/bin"
-CONFIG_DIR="$HOME/.config/throttle-me"
-SYSTEMD_DIR="$HOME/.config/systemd/user"
-SHARE_DIR="$HOME/.local/share/throttle-me"
+INSTALL_DIR="${HOME}/.local/bin"
+CONFIG_DIR="${HOME}/.config/throttle-me"
+SYSTEMD_DIR="${HOME}/.config/systemd/user"
+SHARE_DIR="${HOME}/.local/share/throttle-me"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Functions
@@ -44,8 +45,8 @@ check_dependencies() {
     
     # Check required commands
     for cmd in dialog iptables ip6tables sudo python3; do
-        if ! command -v "$cmd" &>/dev/null; then
-            missing_deps+=("$cmd")
+        if ! command -v "${cmd}" &>/dev/null; then
+            missing_deps+=("${cmd}")
         fi
     done
     
@@ -62,12 +63,12 @@ check_dependencies() {
 create_directories() {
     print_info "Creating directories..."
     
-    mkdir -p "$INSTALL_DIR"
-    mkdir -p "$CONFIG_DIR"
-    mkdir -p "$CONFIG_DIR/presets"
-    mkdir -p "$CONFIG_DIR/sessions"
-    mkdir -p "$SYSTEMD_DIR"
-    mkdir -p "$SHARE_DIR"
+    mkdir -p "${INSTALL_DIR}"
+    mkdir -p "${CONFIG_DIR}"
+    mkdir -p "${CONFIG_DIR}/presets"
+    mkdir -p "${CONFIG_DIR}/sessions"
+    mkdir -p "${SYSTEMD_DIR}"
+    mkdir -p "${SHARE_DIR}"
     
     print_success "Directories created"
 }
@@ -76,43 +77,43 @@ install_scripts() {
     print_info "Installing scripts..."
     
     # Main script
-    cp "$SCRIPT_DIR/throttle-me" "$INSTALL_DIR/"
-    chmod +x "$INSTALL_DIR/throttle-me"
+    cp "${SCRIPT_DIR}/throttle-me" "${INSTALL_DIR}/"
+    chmod +x "${INSTALL_DIR}/throttle-me"
     print_success "Installed throttle-me"
     
     # Daemon script
-    cp "$SCRIPT_DIR/throttle-me-daemon" "$INSTALL_DIR/"
-    chmod +x "$INSTALL_DIR/throttle-me-daemon"
+    cp "${SCRIPT_DIR}/throttle-me-daemon" "${INSTALL_DIR}/"
+    chmod +x "${INSTALL_DIR}/throttle-me-daemon"
     print_success "Installed throttle-me-daemon"
     
     # Library modules
-    if [[ -d "$SCRIPT_DIR/lib" ]]; then
-        cp -r "$SCRIPT_DIR/lib" "$INSTALL_DIR/"
+    if [[ -d "${SCRIPT_DIR}/lib" ]]; then
+        cp -r "${SCRIPT_DIR}/lib" "${INSTALL_DIR}/"
         print_success "Installed library modules"
     fi
 
     # Textual dashboard package
-    if [[ -d "$SCRIPT_DIR/dashboard" ]]; then
-        rm -rf "$SHARE_DIR/dashboard"
-        mkdir -p "$SHARE_DIR/dashboard"
-        cp "$SCRIPT_DIR/dashboard/pyproject.toml" "$SHARE_DIR/dashboard/"
-        [[ -f "$SCRIPT_DIR/dashboard/uv.lock" ]] && cp "$SCRIPT_DIR/dashboard/uv.lock" "$SHARE_DIR/dashboard/"
-        [[ -f "$SCRIPT_DIR/dashboard/README.md" ]] && cp "$SCRIPT_DIR/dashboard/README.md" "$SHARE_DIR/dashboard/"
-        cp -r "$SCRIPT_DIR/dashboard/src" "$SHARE_DIR/dashboard/"
-        [[ -d "$SCRIPT_DIR/dashboard/tests" ]] && cp -r "$SCRIPT_DIR/dashboard/tests" "$SHARE_DIR/dashboard/"
+    if [[ -d "${SCRIPT_DIR}/dashboard" ]]; then
+        rm -rf "${SHARE_DIR}/dashboard"
+        mkdir -p "${SHARE_DIR}/dashboard"
+        cp "${SCRIPT_DIR}/dashboard/pyproject.toml" "${SHARE_DIR}/dashboard/"
+        [[ -f "${SCRIPT_DIR}/dashboard/uv.lock" ]] && cp "${SCRIPT_DIR}/dashboard/uv.lock" "${SHARE_DIR}/dashboard/"
+        [[ -f "${SCRIPT_DIR}/dashboard/README.md" ]] && cp "${SCRIPT_DIR}/dashboard/README.md" "${SHARE_DIR}/dashboard/"
+        cp -r "${SCRIPT_DIR}/dashboard/src" "${SHARE_DIR}/dashboard/"
+        [[ -d "${SCRIPT_DIR}/dashboard/tests" ]] && cp -r "${SCRIPT_DIR}/dashboard/tests" "${SHARE_DIR}/dashboard/"
         print_success "Installed command-center dashboard"
     fi
 
     # External bypass scripts, installed only when the user does not already have them.
-    if [[ -f "$SCRIPT_DIR/scripts/bypass-tethering" && ! -f "$INSTALL_DIR/bypass-tethering" ]]; then
-        cp "$SCRIPT_DIR/scripts/bypass-tethering" "$INSTALL_DIR/"
-        chmod +x "$INSTALL_DIR/bypass-tethering"
+    if [[ -f "${SCRIPT_DIR}/scripts/bypass-tethering" && ! -f "${INSTALL_DIR}/bypass-tethering" ]]; then
+        cp "${SCRIPT_DIR}/scripts/bypass-tethering" "${INSTALL_DIR}/"
+        chmod +x "${INSTALL_DIR}/bypass-tethering"
         print_success "Installed bypass-tethering"
     fi
 
-    if [[ -f "$SCRIPT_DIR/scripts/disable-bypass-tethering" && ! -f "$INSTALL_DIR/disable-bypass-tethering" ]]; then
-        cp "$SCRIPT_DIR/scripts/disable-bypass-tethering" "$INSTALL_DIR/"
-        chmod +x "$INSTALL_DIR/disable-bypass-tethering"
+    if [[ -f "${SCRIPT_DIR}/scripts/disable-bypass-tethering" && ! -f "${INSTALL_DIR}/disable-bypass-tethering" ]]; then
+        cp "${SCRIPT_DIR}/scripts/disable-bypass-tethering" "${INSTALL_DIR}/"
+        chmod +x "${INSTALL_DIR}/disable-bypass-tethering"
         print_success "Installed disable-bypass-tethering"
     fi
 }
@@ -120,7 +121,7 @@ install_scripts() {
 install_systemd_service() {
     print_info "Installing systemd service..."
     
-    cp "$SCRIPT_DIR/config/throttle-me-daemon.service" "$SYSTEMD_DIR/"
+    cp "${SCRIPT_DIR}/config/throttle-me-daemon.service" "${SYSTEMD_DIR}/"
     
     # Reload systemd to recognize new service
     systemctl --user daemon-reload
@@ -131,9 +132,9 @@ install_systemd_service() {
 install_config() {
     print_info "Installing configuration..."
     
-    if [[ ! -f "$CONFIG_DIR/config" ]]; then
-        if [[ -f "$SCRIPT_DIR/config/config.template" ]]; then
-            cp "$SCRIPT_DIR/config/config.template" "$CONFIG_DIR/config"
+    if [[ ! -f "${CONFIG_DIR}/config" ]]; then
+        if [[ -f "${SCRIPT_DIR}/config/config.template" ]]; then
+            cp "${SCRIPT_DIR}/config/config.template" "${CONFIG_DIR}/config"
             print_success "Installed default configuration"
         else
             print_warning "config.template not found, skipping config installation"
@@ -147,9 +148,10 @@ setup_sudoers() {
     print_info "Checking sudoers configuration..."
     
     local sudoers_file="/etc/sudoers.d/throttle-me"
-    local user="$(whoami)"
+    local user
+    user="$(whoami)"
     
-    if [[ -f "$sudoers_file" ]]; then
+    if [[ -f "${sudoers_file}" ]]; then
         print_success "Sudoers configuration already exists"
         return 0
     fi
@@ -158,20 +160,20 @@ setup_sudoers() {
     print_info "The daemon requires passwordless sudo for bypass scripts"
     echo ""
     read -rp "Would you like to configure it now? (y/n): " response
-    if [[ "$response" =~ ^[Yy]$ ]]; then
+    if [[ "${response}" =~ ^[Yy]$ ]]; then
         print_info "Creating sudoers configuration..."
         echo ""
         echo "Run the following command:"
         echo "  sudo visudo -f /etc/sudoers.d/throttle-me"
         echo ""
         echo "Then add these lines:"
-        echo "  $user ALL=(ALL) NOPASSWD: $INSTALL_DIR/throttle-me"
-        echo "  $user ALL=(ALL) NOPASSWD: /usr/sbin/iptables"
-        echo "  $user ALL=(ALL) NOPASSWD: /usr/sbin/ip6tables"
-        echo "  $user ALL=(ALL) NOPASSWD: /usr/bin/tee"
-        echo "  $user ALL=(ALL) NOPASSWD: /usr/bin/chattr"
-        echo "  $user ALL=(ALL) NOPASSWD: /usr/bin/cp"
-        echo "  $user ALL=(ALL) NOPASSWD: /usr/bin/rm"
+        echo "  ${user} ALL=(ALL) NOPASSWD: ${INSTALL_DIR}/throttle-me"
+        echo "  ${user} ALL=(ALL) NOPASSWD: /usr/sbin/iptables"
+        echo "  ${user} ALL=(ALL) NOPASSWD: /usr/sbin/ip6tables"
+        echo "  ${user} ALL=(ALL) NOPASSWD: /usr/bin/tee"
+        echo "  ${user} ALL=(ALL) NOPASSWD: /usr/bin/chattr"
+        echo "  ${user} ALL=(ALL) NOPASSWD: /usr/bin/cp"
+        echo "  ${user} ALL=(ALL) NOPASSWD: /usr/bin/rm"
         echo ""
         read -rp "Press Enter when done..."
     else
@@ -185,7 +187,7 @@ verify_installation() {
     local errors=0
     
     # Check main script
-    if [[ ! -x "$INSTALL_DIR/throttle-me" ]]; then
+    if [[ ! -x "${INSTALL_DIR}/throttle-me" ]]; then
         print_error "throttle-me not found or not executable"
         ((errors++))
     else
@@ -193,7 +195,7 @@ verify_installation() {
     fi
     
     # Check daemon script
-    if [[ ! -x "$INSTALL_DIR/throttle-me-daemon" ]]; then
+    if [[ ! -x "${INSTALL_DIR}/throttle-me-daemon" ]]; then
         print_error "throttle-me-daemon not found or not executable"
         ((errors++))
     else
@@ -201,14 +203,14 @@ verify_installation() {
     fi
     
     # Check systemd service
-    if [[ ! -f "$SYSTEMD_DIR/throttle-me-daemon.service" ]]; then
+    if [[ ! -f "${SYSTEMD_DIR}/throttle-me-daemon.service" ]]; then
         print_error "systemd service not found"
         ((errors++))
     else
         print_success "systemd service installed"
     fi
 
-    if [[ ! -f "$SHARE_DIR/dashboard/pyproject.toml" ]]; then
+    if [[ ! -f "${SHARE_DIR}/dashboard/pyproject.toml" ]]; then
         print_error "command-center dashboard not installed"
         ((errors++))
     else
@@ -216,21 +218,21 @@ verify_installation() {
     fi
     
     # Check configuration
-    if [[ ! -f "$CONFIG_DIR/config" ]]; then
+    if [[ ! -f "${CONFIG_DIR}/config" ]]; then
         print_warning "Configuration file not created"
     else
         print_success "Configuration file exists"
     fi
     
     # Check PATH
-    if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
-        print_warning "$INSTALL_DIR not in PATH - you may need to add it"
+    if ! echo "${PATH}" | grep -q "${INSTALL_DIR}"; then
+        print_warning "${INSTALL_DIR} not in PATH - you may need to add it"
         print_info "Add to ~/.bashrc: export PATH=\"\$HOME/.local/bin:\$PATH\""
     else
-        print_success "$INSTALL_DIR is in PATH"
+        print_success "${INSTALL_DIR} is in PATH"
     fi
     
-    return $errors
+    return "${errors}"
 }
 
 show_next_steps() {

@@ -1,5 +1,6 @@
 #!/bin/bash
 # lib/core.sh - Core bypass enable/disable logic for throttle-me
+# shellcheck disable=SC2154,SC2310
 
 set -euo pipefail
 
@@ -9,9 +10,9 @@ enable_bypass() {
     
     # Check if bypass script exists
     local bypass_script="${CONFIG[BYPASS_SCRIPT]}"
-    if [[ ! -f "$bypass_script" ]]; then
-        log_error "Bypass script not found: $bypass_script"
-        log_error "Please ensure $bypass_script exists and is executable"
+    if [[ ! -f "${bypass_script}" ]]; then
+        log_error "Bypass script not found: ${bypass_script}"
+        log_error "Please ensure ${bypass_script} exists and is executable"
         return 1
     fi
     
@@ -25,7 +26,7 @@ enable_bypass() {
     if TTL_VALUE="${CONFIG[TTL_VALUE]}" \
         HL_VALUE="${CONFIG[HL_VALUE]:-${CONFIG[TTL_VALUE]}}" \
         DNS_SERVER="${CONFIG[DNS_SERVER]}" \
-        "$bypass_script"; then
+        "${bypass_script}"; then
         log_info "✅ Bypass enabled successfully"
         log_info "TTL set to ${CONFIG[TTL_VALUE]}, DNS redirected to ${CONFIG[DNS_SERVER]}"
 
@@ -45,9 +46,9 @@ disable_bypass() {
     
     # Check if disable script exists
     local disable_script="${CONFIG[DISABLE_SCRIPT]}"
-    if [[ ! -f "$disable_script" ]]; then
-        log_error "Disable script not found: $disable_script"
-        log_error "Please ensure $disable_script exists and is executable"
+    if [[ ! -f "${disable_script}" ]]; then
+        log_error "Disable script not found: ${disable_script}"
+        log_error "Please ensure ${disable_script} exists and is executable"
         return 1
     fi
     
@@ -61,7 +62,7 @@ disable_bypass() {
     end_session 2>/dev/null || true
 
     # Execute disable script
-    if DNS_SERVER="${CONFIG[DNS_SERVER]}" "$disable_script"; then
+    if DNS_SERVER="${CONFIG[DNS_SERVER]}" "${disable_script}"; then
         log_info "✅ Bypass disabled successfully"
         log_info "Network settings restored to normal"
         return 0
@@ -79,48 +80,49 @@ show_status() {
     # Parse status
     local status="" ttl_ipv4="" hl_ipv6="" dns_ipv4="" dns_ipv6="" dns_config="" dns_lock="" dns_transport="" packets_ipv4="" packets_ipv6=""
     while IFS='=' read -r key value; do
-        case $key in
-            STATUS) status="$value" ;;
-            TTL_IPV4) ttl_ipv4="$value" ;;
-            HL_IPV6) hl_ipv6="$value" ;;
-            DNS_IPV4) dns_ipv4="$value" ;;
-            DNS_IPV6) dns_ipv6="$value" ;;
-            DNS_CONFIG) dns_config="$value" ;;
-            DNS_LOCK) dns_lock="$value" ;;
-            DNS_TRANSPORT) dns_transport="$value" ;;
-            PACKETS_IPV4) packets_ipv4="$value" ;;
-            PACKETS_IPV6) packets_ipv6="$value" ;;
+        case ${key} in
+            STATUS) status="${value}" ;;
+            TTL_IPV4) ttl_ipv4="${value}" ;;
+            HL_IPV6) hl_ipv6="${value}" ;;
+            DNS_IPV4) dns_ipv4="${value}" ;;
+            DNS_IPV6) dns_ipv6="${value}" ;;
+            DNS_CONFIG) dns_config="${value}" ;;
+            DNS_LOCK) dns_lock="${value}" ;;
+            DNS_TRANSPORT) dns_transport="${value}" ;;
+            PACKETS_IPV4) packets_ipv4="${value}" ;;
+            PACKETS_IPV6) packets_ipv6="${value}" ;;
+            *) ;;
         esac
-    done <<< "$status_output"
+    done <<< "${status_output}"
 
     echo "=== CARRIER BYPASS STATUS ==="
     echo ""
 
-    if [[ "$status" == "ACTIVE" ]]; then
+    if [[ "${status}" == "ACTIVE" ]]; then
         echo -e "${GREEN}Status: ACTIVE ✅${NC}"
-    elif [[ "$status" == "PARTIAL" ]]; then
+    elif [[ "${status}" == "PARTIAL" ]]; then
         echo -e "${YELLOW}Status: PARTIAL ⚠️${NC}"
     else
         echo -e "${RED}Status: INACTIVE ❌${NC}"
     fi
 
     echo ""
-    echo "IPv4 TTL Modification: $ttl_ipv4"
-    echo "IPv6 Hop Limit:        $hl_ipv6"
+    echo "IPv4 TTL Modification: ${ttl_ipv4}"
+    echo "IPv6 Hop Limit:        ${hl_ipv6}"
     echo ""
-    echo "IPv4 DNS Redirection:  $dns_ipv4"
-    echo "IPv6 DNS Redirection:  $dns_ipv6"
-    echo "DNS Config:            $dns_config"
+    echo "IPv4 DNS Redirection:  ${dns_ipv4}"
+    echo "IPv6 DNS Redirection:  ${dns_ipv6}"
+    echo "DNS Config:            ${dns_config}"
     echo "DNS Lock:              ${dns_lock:-Unknown}"
     echo "DNS Transport:         ${dns_transport:-Unknown}"
 
-    if [[ "$status" == "ACTIVE" || "$status" == "PARTIAL" ]]; then
+    if [[ "${status}" == "ACTIVE" || "${status}" == "PARTIAL" ]]; then
         echo ""
-        if [[ "$packets_ipv4" != "N/A" ]]; then
-            echo "IPv4 Packets Modified: $packets_ipv4"
+        if [[ "${packets_ipv4}" != "N/A" ]]; then
+            echo "IPv4 Packets Modified: ${packets_ipv4}"
         fi
-        if [[ "$packets_ipv6" != "N/A" && "$packets_ipv6" != "0 packets, 0" ]]; then
-            echo "IPv6 Packets Modified: $packets_ipv6"
+        if [[ "${packets_ipv6}" != "N/A" && "${packets_ipv6}" != "0 packets, 0" ]]; then
+            echo "IPv6 Packets Modified: ${packets_ipv6}"
         fi
     fi
 
@@ -128,7 +130,7 @@ show_status() {
     local connection
     connection=$(ip route | grep default | awk '{print $3, "via", $5}' || echo "No connection")
     echo ""
-    echo "Connection: $connection"
+    echo "Connection: ${connection}"
 }
 
 # Run speed test using curl
@@ -146,21 +148,25 @@ run_speed_test() {
 
     # Extract speed in bytes/sec
     local speed_bytes
-    speed_bytes=$(echo "$result" | grep "Speed:" | awk '{print $2}')
+    speed_bytes=$(echo "${result}" | grep "Speed:" | awk '{print $2}')
 
     # Convert to Mbps
     local speed_mbps
-    speed_mbps=$(echo "scale=2; $speed_bytes * 8 / 1000000" | bc)
+    speed_mbps=$(echo "scale=2; ${speed_bytes} * 8 / 1000000" | bc)
 
-    echo "$result"
+    echo "${result}"
     echo ""
     echo -e "${GREEN}Download Speed: ${speed_mbps} Mbps${NC}"
     echo ""
 
     # Show interpretation
-    if (( $(echo "$speed_mbps > 20" | bc -l) )); then
+    local speed_is_excellent speed_is_usable
+    speed_is_excellent=$(echo "${speed_mbps} > 20" | bc -l)
+    speed_is_usable=$(echo "${speed_mbps} > 5" | bc -l)
+
+    if (( speed_is_excellent )); then
         echo -e "${GREEN}✅ Bypass is working! Speed is excellent.${NC}"
-    elif (( $(echo "$speed_mbps > 5" | bc -l) )); then
+    elif (( speed_is_usable )); then
         echo -e "${YELLOW}⚠️  Bypass is working, but speed could be better.${NC}"
     else
         echo -e "${RED}❌ Speed is slow - bypass may not be active.${NC}"
@@ -181,10 +187,10 @@ show_presets() {
 
 save_current_preset() {
     local name=$1
-    save_preset "$name"
+    save_preset "${name}"
 }
 
 load_saved_preset() {
     local name=$1
-    load_preset "$name"
+    load_preset "${name}"
 }

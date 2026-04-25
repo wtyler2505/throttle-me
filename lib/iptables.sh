@@ -1,5 +1,6 @@
 #!/bin/bash
 # lib/iptables.sh - iptables/ip6tables operations wrapper for throttle-me
+# shellcheck disable=SC2154,SC2310
 
 set -euo pipefail
 
@@ -46,9 +47,9 @@ is_bypass_active() {
 get_dns_lock_status() {
     local attrs
     attrs=$(lsattr -L /etc/resolv.conf 2>/dev/null | awk '{print $1}' || true)
-    if [[ -z "$attrs" ]]; then
+    if [[ -z "${attrs}" ]]; then
         echo "Unknown"
-    elif [[ "$attrs" == *i* ]]; then
+    elif [[ "${attrs}" == *i* ]]; then
         echo "Immutable"
     else
         echo "Not locked"
@@ -98,21 +99,21 @@ get_bypass_status() {
     dns_lock=$(get_dns_lock_status)
 
     # Overall status: active only when the IPv4 minimum viable path is complete.
-    if [[ "$ttl_status" == Active* && "$dns_status" == "Active" ]]; then
+    if [[ "${ttl_status}" == Active* && "${dns_status}" == "Active" ]]; then
         status="ACTIVE"
-    elif [[ "$ttl_status" == Active* || "$dns_status" == "Active" || "$ipv6_hl_status" == Active* || "$ipv6_dns_status" == "Active" ]]; then
+    elif [[ "${ttl_status}" == Active* || "${dns_status}" == "Active" || "${ipv6_hl_status}" == Active* || "${ipv6_dns_status}" == "Active" ]]; then
         status="PARTIAL"
     fi
 
     # Return status as key=value pairs
-    echo "STATUS=$status"
-    echo "TTL_IPV4=$ttl_status"
-    echo "HL_IPV6=$ipv6_hl_status"
-    echo "DNS_IPV4=$dns_status"
-    echo "DNS_IPV6=$ipv6_dns_status"
-    echo "DNS_CONFIG=$dns_config"
-    echo "DNS_LOCK=$dns_lock"
-    echo "DNS_TRANSPORT=$dns_transport"
-    echo "PACKETS_IPV4=$packets"
-    echo "PACKETS_IPV6=$ipv6_packets"
+    echo "STATUS=${status}"
+    echo "TTL_IPV4=${ttl_status}"
+    echo "HL_IPV6=${ipv6_hl_status}"
+    echo "DNS_IPV4=${dns_status}"
+    echo "DNS_IPV6=${ipv6_dns_status}"
+    echo "DNS_CONFIG=${dns_config}"
+    echo "DNS_LOCK=${dns_lock}"
+    echo "DNS_TRANSPORT=${dns_transport}"
+    echo "PACKETS_IPV4=${packets}"
+    echo "PACKETS_IPV6=${ipv6_packets}"
 }

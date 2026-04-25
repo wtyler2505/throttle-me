@@ -1,6 +1,7 @@
 #!/bin/bash
 # throttle-me v2.0 - TUI for managing carrier hotspot bypass
 # Modular, tested, production-ready
+# shellcheck disable=SC2310
 
 # Bash strict mode
 set -euo pipefail
@@ -9,19 +10,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source all library modules
-source "$SCRIPT_DIR/lib/logging.sh"
-source "$SCRIPT_DIR/lib/utils.sh"
-source "$SCRIPT_DIR/lib/config.sh"
-source "$SCRIPT_DIR/lib/network.sh"
-source "$SCRIPT_DIR/lib/iptables.sh"
-source "$SCRIPT_DIR/lib/core.sh"
-source "$SCRIPT_DIR/lib/presets.sh"
-source "$SCRIPT_DIR/lib/stats.sh"
-source "$SCRIPT_DIR/lib/retention.sh"
-source "$SCRIPT_DIR/lib/detection.sh"
-source "$SCRIPT_DIR/lib/daemon.sh"
-source "$SCRIPT_DIR/lib/ui-theme.sh"
-source "$SCRIPT_DIR/lib/ui-dialog.sh"
+source "${SCRIPT_DIR}/lib/logging.sh"
+source "${SCRIPT_DIR}/lib/utils.sh"
+source "${SCRIPT_DIR}/lib/config.sh"
+source "${SCRIPT_DIR}/lib/network.sh"
+source "${SCRIPT_DIR}/lib/iptables.sh"
+source "${SCRIPT_DIR}/lib/core.sh"
+source "${SCRIPT_DIR}/lib/presets.sh"
+source "${SCRIPT_DIR}/lib/stats.sh"
+source "${SCRIPT_DIR}/lib/retention.sh"
+source "${SCRIPT_DIR}/lib/detection.sh"
+source "${SCRIPT_DIR}/lib/daemon.sh"
+source "${SCRIPT_DIR}/lib/ui-theme.sh"
+source "${SCRIPT_DIR}/lib/ui-dialog.sh"
 
 # Trap handlers
 trap cleanup EXIT
@@ -51,13 +52,15 @@ case "${1:-}" in
         launch_dashboard --smoke "$@"
         exit $?
         ;;
+    *)
+        ;;
 esac
 
 # Parse command line arguments
 CLI_MODE=false
 
 while getopts "edsmtvpl:SHai:cD:" opt; do
-    case $opt in
+    case ${opt} in
         e)
             CLI_MODE=true
             start_sudo_cache
@@ -87,9 +90,9 @@ while getopts "edsmtvpl:SHai:cD:" opt; do
             }
             clear
             echo "Starting real-time network monitor (press 'q' to quit)..."
-            echo "Interface: $iface"
+            echo "Interface: ${iface}"
             sleep 1
-            bmon -p "$iface" -o curses:rxlist=1:txlist=1
+            bmon -p "${iface}" -o curses:rxlist=1:txlist=1
             exit 0
             ;;
         t)
@@ -106,8 +109,8 @@ while getopts "edsmtvpl:SHai:cD:" opt; do
             ;;
         l)
             CLI_MODE=true
-            log_info "CLI mode: Load preset '$OPTARG'"
-            load_saved_preset "$OPTARG"
+            log_info "CLI mode: Load preset '${OPTARG}'"
+            load_saved_preset "${OPTARG}"
             exit 0
             ;;
         S)
@@ -129,16 +132,16 @@ while getopts "edsmtvpl:SHai:cD:" opt; do
             show_detection_info
             echo ""
             read -rp "Enable auto-detection? (y/n): " response
-            if [[ "$response" =~ ^[Yy]$ ]]; then
+            if [[ "${response}" =~ ^[Yy]$ ]]; then
                 auto_enable_if_hotspot && echo "✅ Auto-enable successful" || echo "❌ Not on mobile hotspot"
             fi
             exit 0
             ;;
         i)
             CLI_MODE=true
-            log_info "CLI mode: Interface override '$OPTARG'"
-            CONFIG[INTERFACE_OVERRIDE]="$OPTARG"
-            echo "Interface override set to: $OPTARG"
+            log_info "CLI mode: Interface override '${OPTARG}'"
+            CONFIG[INTERFACE_OVERRIDE]="${OPTARG}"
+            echo "Interface override set to: ${OPTARG}"
             detect_wireless_interface || echo "Warning: Interface may not be valid"
             exit 0
             ;;
@@ -149,14 +152,14 @@ while getopts "edsmtvpl:SHai:cD:" opt; do
             show_retention_info
             echo ""
             read -rp "Apply retention policy now? (y/n): " response
-            if [[ "$response" =~ ^[Yy]$ ]]; then
+            if [[ "${response}" =~ ^[Yy]$ ]]; then
                 manual_cleanup
             fi
             exit 0
             ;;
         D)
             CLI_MODE=true
-            case "$OPTARG" in
+            case "${OPTARG}" in
                 start)
                     daemon_start
                     exit $?
@@ -182,7 +185,7 @@ while getopts "edsmtvpl:SHai:cD:" opt; do
                     exit $?
                     ;;
                 logs)
-                    daemon_logs
+                    daemon_logs 50
                     exit $?
                     ;;
                 follow)
@@ -190,7 +193,7 @@ while getopts "edsmtvpl:SHai:cD:" opt; do
                     exit $?
                     ;;
                 *)
-                    echo "Invalid daemon action: $OPTARG" >&2
+                    echo "Invalid daemon action: ${OPTARG}" >&2
                     echo "Valid actions: start, stop, status, enable, disable, restart, logs, follow" >&2
                     exit 1
                     ;;
@@ -259,11 +262,13 @@ For more information, visit: https://github.com/user/throttle-me
 EOF
             exit 1
             ;;
+        *)
+            ;;
     esac
 done
 
 # If no CLI args, start TUI
-if [[ "$CLI_MODE" == "false" ]]; then
+if [[ "${CLI_MODE}" == "false" ]]; then
     log_info "Starting command center dashboard"
     launch_dashboard
 fi

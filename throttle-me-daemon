@@ -1,0 +1,166 @@
+#!/bin/bash
+# throttle-me-daemon - Background daemon for automatic hotspot detection
+# Monitors network connections and auto-enables bypass for mobile hotspots
+# shellcheck disable=SC2310
+
+set -euo pipefail
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source required libraries
+source "${SCRIPT_DIR}/lib/logging.sh"
+source "${SCRIPT_DIR}/lib/utils.sh"
+source "${SCRIPT_DIR}/lib/config.sh"
+source "${SCRIPT_DIR}/lib/network.sh"
+source "${SCRIPT_DIR}/lib/detection.sh"
+
+# Initialize
+initialize_logging
+load_config
+
+# Daemon configuration
+LOCK_FILE="${HOME}/.cache/throttle-me/daemon.lock"
+STATE_FILE="${HOME}/.config/throttle-me/daemon.state"
+POLL_INTERVAL=5  # seconds
+
+# Ensure directories exist
+mkdir -p "$(dirname "${LOCK_FILE}")"
+mkdir -p "$(dirname "${STATE_FILE}")"
+
+# Desktop notification helper
+daemon_notify() {
+    local urgency=$1
+    local title=$2
+    local message=$3
+    local icon=${4:-network-wireless}
+    
+    # Send desktop notification if in graphical session
+    if [[ -n "${DISPLAY:-}" ]] && command -v notify-send &>/dev/null; then
+        notify-send -u "${urgency}" -t 5000 -i "${icon}" "${title}" "${message}" 2>/dev/null || true
+    fi
+    
+    # Always log to journal
+    logger -t throttle-me-daemon -p user.info "${title}: ${message}"
+}
+
+# State persistence
+save_state() {
+    local last_check
+    last_check=$(date +%s)
+
+    cat > "${STATE_FILE}" << EOF
+LAST_SSID=${last_ssid}
+BYPASS_ACTIVE=${bypass_active}
+LAST_CHECK=${last_check}
+EOF
+}
+
+load_state() {
+    if [[ -f "${STATE_FILE}" ]]; then
+        source "${STATE_FILE}"
+    else
+        LAST_SSID=""
+        BYPASS_ACTIVE="false"
+        LAST_CHECK=0
+    fi
+}
+
+# Cleanup handler
+cleanup() {
+    log_info "Daemon shutting down gracefully..."
+    rm -f "${LOCK_FILE}"
+    save_state
+    exit 0
+}
+
+# Signal handlers
+trap cleanup SIGTERM SIGINT
+
+# Lock file handling - prevent multiple instances
+exec 200>"${LOCK_FILE}"
+if ! flock -n 200; then
+    existing_pid=$(cat "${LOCK_FILE}" 2>/dev/null || echo 'unknown')
+    echo "ERROR: throttle-me-daemon is already running" >&2
+    echo "PID: ${existing_pid}" >&2
+    exit 1
+fi
+
+# Write PID to lock file
+echo $$ > "${LOCK_FILE}"
+
+# Load previous state
+load_state
+last_ssid="${LAST_SSID:-}"
+bypass_active="${BYPASS_ACTIVE:-false}"
+last_check="${LAST_CHECK:-0}"
+
+log_info "Daemon started (PID: $$)"
+log_debug "Previous daemon check timestamp: ${last_check}"
+daemon_notify normal "Daemon Started" "Monitoring for mobile hotspots" "dialog-information"
+
+# Detect wireless interface
+iface=$(detect_wireless_interface) || {
+    log_error "No wireless interface detected"
+    daemon_notify critical "Daemon Error" "No wireless interface found" "dialog-error"
+    exit 1
+}
+
+log_info "Monitoring interface: ${iface}"
+
+# Main monitoring loop
+while true; do
+    # Get current SSID
+    current_ssid=$(get_current_ssid "${iface}" 2>/dev/null || echo "")
+    
+    # Check if SSID changed
+    if [[ "${current_ssid}" != "${last_ssid}" ]]; then
+        log_info "SSID changed: '${last_ssid}' → '${current_ssid}'"
+        
+        # Empty SSID means disconnected
+        if [[ -z "${current_ssid}" ]]; then
+            if [[ "${bypass_active}" == "true" ]]; then
+                log_info "Disconnected from network - disabling bypass"
+                "${SCRIPT_DIR}/throttle-me" -d 2>/dev/null || true
+                bypass_active="false"
+                daemon_notify low "Bypass Disabled" "Disconnected from network" "network-wireless-offline"
+            fi
+        else
+            # Check if AUTO_ENABLE is enabled
+            if [[ "${CONFIG[AUTO_ENABLE]}" == "true" ]]; then
+                # Check if current network is a mobile hotspot
+                if ssid_result=$(detect_hotspot_connection 2>/dev/null); then
+                    # Mobile hotspot detected
+                    if [[ "${bypass_active}" != "true" ]]; then
+                        log_info "Hotspot detected: ${ssid_result} - enabling bypass"
+                        "${SCRIPT_DIR}/throttle-me" -e 2>/dev/null || {
+                            log_error "Failed to enable bypass"
+                            daemon_notify critical "Bypass Error" "Failed to enable bypass" "dialog-error"
+                        }
+                        bypass_active="true"
+                        daemon_notify normal "Bypass Enabled" "Connected to ${ssid_result}" "network-wireless-hotspot"
+                    fi
+                else
+                    # Regular WiFi network
+                    if [[ "${bypass_active}" == "true" ]]; then
+                        log_info "Regular WiFi: ${current_ssid} - disabling bypass"
+                        "${SCRIPT_DIR}/throttle-me" -d 2>/dev/null || {
+                            log_error "Failed to disable bypass"
+                            daemon_notify critical "Bypass Error" "Failed to disable bypass" "dialog-error"
+                        }
+                        bypass_active="false"
+                        daemon_notify low "Bypass Disabled" "Connected to ${current_ssid}" "network-wireless"
+                    fi
+                fi
+            else
+                log_debug "AUTO_ENABLE is disabled - skipping bypass management"
+            fi
+        fi
+        
+        last_ssid="${current_ssid}"
+        save_state
+    fi
+    
+    # Sleep before next check
+    sleep "${POLL_INTERVAL}"
+done

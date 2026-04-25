@@ -1,5 +1,6 @@
 #!/bin/bash
 # lib/utils.sh - Common utilities and sudo caching for throttle-me
+# shellcheck disable=SC2310
 
 set -euo pipefail
 
@@ -24,13 +25,13 @@ start_sudo_cache() {
     ) &
     
     SUDO_CACHE_PID=$!
-    log_debug "Started sudo cache (PID: $SUDO_CACHE_PID)"
+    log_debug "Started sudo cache (PID: ${SUDO_CACHE_PID})"
 }
 
 # Stop sudo credential cache
 stop_sudo_cache() {
-    if [[ -n "$SUDO_CACHE_PID" ]]; then
-        kill "$SUDO_CACHE_PID" 2>/dev/null || true
+    if [[ -n "${SUDO_CACHE_PID}" ]]; then
+        kill "${SUDO_CACHE_PID}" 2>/dev/null || true
         log_debug "Stopped sudo cache"
     fi
     sudo -k  # Clear sudo timestamp
@@ -60,18 +61,18 @@ launch_dashboard() {
     local dashboard_dir=""
     local candidate
     local candidates=(
-        "$SCRIPT_DIR/dashboard"
-        "$HOME/.local/share/throttle-me/dashboard"
+        "${SCRIPT_DIR}/dashboard"
+        "${HOME}/.local/share/throttle-me/dashboard"
     )
 
     for candidate in "${candidates[@]}"; do
-        if [[ -f "$candidate/pyproject.toml" ]]; then
-            dashboard_dir="$candidate"
+        if [[ -f "${candidate}/pyproject.toml" ]]; then
+            dashboard_dir="${candidate}"
             break
         fi
     done
 
-    if [[ -z "$dashboard_dir" ]]; then
+    if [[ -z "${dashboard_dir}" ]]; then
         log_warn "Dashboard package not found; launching classic UI"
         start_sudo_cache
         start_tui
@@ -79,7 +80,7 @@ launch_dashboard() {
     fi
 
     if command_exists uv; then
-        THROTTLE_ME_ROOT="$SCRIPT_DIR" uv run --project "$dashboard_dir" throttle-me-dashboard "$@"
+        THROTTLE_ME_ROOT="${SCRIPT_DIR}" uv run --project "${dashboard_dir}" throttle-me-dashboard "$@"
         return $?
     fi
 
@@ -90,26 +91,26 @@ launch_dashboard() {
         return $?
     fi
 
-    local venv_dir="$dashboard_dir/.venv"
-    if [[ ! -x "$venv_dir/bin/throttle-me-dashboard" ]]; then
-        python3 -m venv "$venv_dir"
-        "$venv_dir/bin/python" -m pip install --upgrade pip
-        "$venv_dir/bin/python" -m pip install "$dashboard_dir"
+    local venv_dir="${dashboard_dir}/.venv"
+    if [[ ! -x "${venv_dir}/bin/throttle-me-dashboard" ]]; then
+        python3 -m venv "${venv_dir}"
+        "${venv_dir}/bin/python" -m pip install --upgrade pip
+        "${venv_dir}/bin/python" -m pip install "${dashboard_dir}"
     fi
 
-    THROTTLE_ME_ROOT="$SCRIPT_DIR" "$venv_dir/bin/throttle-me-dashboard" "$@"
+    THROTTLE_ME_ROOT="${SCRIPT_DIR}" "${venv_dir}/bin/throttle-me-dashboard" "$@"
 }
 
 # Get the script directory
 get_script_dir() {
     local source="${BASH_SOURCE[0]}"
-    while [[ -L "$source" ]]; do
+    while [[ -L "${source}" ]]; do
         local dir
-        dir="$(cd -P "$(dirname "$source")" && pwd)"
-        source="$(readlink "$source")"
-        [[ $source != /* ]] && source="$dir/$source"
+        dir="$(cd -P "$(dirname "${source}")" && pwd)"
+        source="$(readlink "${source}")"
+        [[ ${source} != /* ]] && source="${dir}/${source}"
     done
-    cd -P "$(dirname "$source")/.." && pwd
+    cd -P "$(dirname "${source}")/.." && pwd
 }
 
 # Version information
