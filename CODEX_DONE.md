@@ -3,6 +3,11 @@
 **Task:** Build a substantially better `throttle-me` command-center dashboard, fix the Textual confirmation crash, run three interaction/visual/reliability iteration rounds with tmux checks, update product analysis, and keep shellcheck clean.
 **Status:** done
 
+## Commits
+
+- `cc63dc3 feat: deepen command center dashboard` - Main dashboard rebuild, product analysis update, tests, handoff.
+- `d339017 fix: tame ultra-wide dashboard layout` - Follow-up fix after Tyler's ultra-wide terminal capture.
+
 ## Changes Made
 
 - `dashboard/src/throttle_me_dashboard/app.py` - Replaced `push_screen_wait` confirmations with callback-safe modal handling; added native command palette commands, live config editing, profile saves, doctor action, command history, repeat-last, command busy guard, and responsive side-panel behavior.
@@ -35,6 +40,17 @@ tmux resize-window -t throttle-me-round3 -x 120 -y 36
 tmux new-session -d -s throttle-me-wide-fix -x 360 -y 58 'throttle-me'
 ```
 
+## Verification Results
+
+- Dashboard tests: `12 passed`
+- Dashboard smoke: passed from `uv run --project dashboard throttle-me-dashboard --smoke`
+- Local CLI smoke: passed from `./throttle-me --dashboard-smoke`
+- Installed CLI smoke: passed from `throttle-me --dashboard-smoke`
+- Syntax checks: passed for `throttle-me`, `throttle-me-daemon`, `install.sh`, `test-theme.sh`, `lib/*.sh`, and `scripts/*`
+- Shellcheck: passed with no findings for `throttle-me throttle-me-daemon install.sh test-theme.sh lib/*.sh scripts/*`
+- tmux verification: round 1, round 2, round 3, 120-column responsive check, and 360-column ultra-wide check completed
+- tmux cleanup: no dashboard tmux sessions left running
+
 ## Next Steps
 
 - Highest-value next product work: replace shared-chain flushing with owned iptables/nftables chains and add transactional enable/verify/rollback.
@@ -52,3 +68,5 @@ The original crash path was caused by using `push_screen_wait(... wait_for_dismi
 Three requested iteration rounds were completed. Each round included interaction depth, visual/ergonomic polish, reliability/edge-case hardening, and a real `throttle-me` tmux run afterward. Final verification passed with clean shellcheck, dashboard smoke from both local and installed commands, and responsive tmux capture at 120 columns.
 
 After Tyler showed an ultra-wide terminal capture, the dashboard was tightened again: the shell is now capped at 224 columns and Overview uses a two-by-two evidence grid instead of stretching each panel across the whole terminal. The latest dashboard test run passed with `12 passed`, and a 360-column tmux capture confirmed the runaway horizontal whitespace is gone.
+
+Plain `throttle-me` is using the synced installed dashboard at `~/.local/share/throttle-me/dashboard`. The latest handoff state is this file.
