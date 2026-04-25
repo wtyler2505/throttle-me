@@ -114,11 +114,11 @@ get_script_dir() {
 }
 
 # Version information
-THROTTLE_ME_VERSION="2.0.0-alpha"
-THROTTLE_ME_DATE="2025-10-17"
+THROTTLE_ME_VERSION="3.0.0"
+THROTTLE_ME_DATE="2026-04-25"
 
 # Show version
 show_version() {
     echo "throttle-me v${THROTTLE_ME_VERSION} (${THROTTLE_ME_DATE})"
-    echo "Carrier hotspot throttling bypass manager"
+    echo "Carrier hotspot bypass command center"
 }

@@ -1,6 +1,6 @@
 #!/bin/bash
-# throttle-me v2.0 - TUI for managing carrier hotspot bypass
-# Modular, tested, production-ready
+# throttle-me v3.0 - Command center for managing carrier hotspot bypass
+# Modular command-center dashboard with CLI fallbacks
 # shellcheck disable=SC2310
 
 # Bash strict mode

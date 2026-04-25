@@ -123,7 +123,7 @@ show_banner() {
     figlet -f big "THROTTLE-ME" | sed 's/^/  /'
     echo -e "${T_RESET}"
     echo -e "${T_NEON_CYAN}  ═══════════════════════════════════════════════════════════════════════${T_RESET}"
-    echo -e "${T_NEON_MAGENTA}              [●] CARRIER BYPASS SYSTEM [●]              v2.0.0-alpha${T_RESET}"
+    echo -e "${T_NEON_MAGENTA}              [●] CARRIER BYPASS COMMAND CENTER [●]       v3.0.0${T_RESET}"
     echo -e "${T_NEON_CYAN}  ═══════════════════════════════════════════════════════════════════════${T_RESET}"
     echo ""
     sleep 0.3

@@ -282,7 +282,7 @@ Not run:
 | Maintainability | 6/10 | Small modular Bash, but shellcheck warning debt and cross-file globals need work. |
 | Testability | 3/10 | No automated tests around the dangerous paths yet. |
 
-Overall: promising alpha, but not yet trustworthy enough to call production-ready.
+Overall: promising early-stage product, but not yet trustworthy enough to call production-ready.
 
 ## Sources
 
