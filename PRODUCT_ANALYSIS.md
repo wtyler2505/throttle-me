@@ -13,16 +13,19 @@ Implementation progress started after this analysis:
 - Added a Python read/diagnostic layer that reports active/partial/inactive/unknown state without mutating firewall or DNS state.
 - Added repo-shipped `scripts/bypass-tethering` and `scripts/disable-bypass-tethering` so fresh installs have concrete script sources.
 - Updated config loading so script paths and dashboard/daemon settings are honored.
+- Passed config values through to the shipped bypass scripts via `TTL_VALUE`, `HL_VALUE`, and `DNS_SERVER`.
 - Relabeled DNS behavior as public DNS redirection rather than encrypted DoH/DoT.
 - Aligned installer and daemon docs around command-scoped sudoers guidance.
+- Expanded the dashboard through three tmux-verified iteration rounds: callback-safe confirmations, native Textual command palette, smart inspector, live config editor, profiles, doctor report, command history, repeat-last, command-in-flight guard, and responsive side-panel behavior.
+- Cleaned the shellcheck findings for the expanded shell surface.
 
-The biggest gaps are product-truth gaps, not missing polish:
+The biggest remaining gaps are now safety and product-truth gaps, not basic UI polish:
 
-1. Installability is broken for a fresh clone. The docs tell users to copy `bypass-tethering` and `disable-bypass-tethering`, but those scripts are not in the repo, and `install.sh` does not install them. `lib/core.sh` still depends on the external scripts.
-2. Config and presets are mostly advisory. `TTL_VALUE` and `DNS_SERVER` update status text and saved presets, but the actual external bypass script hardcodes TTL 65 and Cloudflare DNS.
-3. The DNS claim is overstated. The product and script describe "encrypted DNS" and "Cloudflare DoH", but the implementation writes `nameserver 1.1.1.1` and DNATs port 53 to `1.1.1.1:53`, which is normal DNS transport, not DoH.
-4. Status can over-report safety. It does not verify `resolv.conf` immutability through symlinks, partial IPv4/IPv6 failure modes, nftables compatibility, or whether the configured preset actually affected packet rules.
-5. The daemon is promising but brittle. It has duplicated header/init code, a default `AUTO_ENABLE=false`, ignored template settings, hardcoded polling, and sudoers documentation that conflicts with installer guidance.
+1. The shipped bypass scripts still flush shared `POSTROUTING` chains. That is the largest safety risk because unrelated firewall rules can be removed.
+2. Existing installs may still point at older local bypass scripts because the installer does not overwrite user-owned copies. The dashboard can detect mismatched script TTL/DNS, but migration needs a first-class path.
+3. Enable/disable is not transactional. The product can diagnose partial state, but the rule application path does not yet snapshot, verify, and roll back.
+4. DNS language is now honest, but the product only implements public resolver redirection. There is no encrypted local resolver mode yet.
+5. The daemon is promising but still needs a clearer privilege model, first-run prerequisite checks, and event-driven NetworkManager integration.
 
 Best next product move: build a "truthful core" milestone before adding new bypass techniques. Make install, config, status, and daemon behavior accurately reflect the machine state. That will compound into trust.
 
@@ -60,26 +63,21 @@ Market implication: do not try to out-feature phone apps or routers broadly. Win
 ### P0 - Product must be truthful and installable
 
 1. Ship or explicitly generate the external bypass scripts.
-   - Evidence: `lib/core.sh` executes `${CONFIG[BYPASS_SCRIPT]}` and `${CONFIG[DISABLE_SCRIPT]}`.
-   - Evidence: `docs/QUICKSTART.md` lines 58-60 instruct users to copy `bypass-tethering` files from the repo, but `rg --files -g 'bypass-tethering' -g 'disable-bypass-tethering'` found none.
-   - Evidence: `install.sh` installs `throttle-me`, `throttle-me-daemon`, and `lib/`, but not the external scripts.
-   - Recommendation: either vendor the scripts into `bin/`, generate them from templates, or make the first-run setup detect and import existing local scripts with explicit warnings.
+   - Status: mostly done. The repo now includes `scripts/bypass-tethering` and `scripts/disable-bypass-tethering`, and `install.sh` installs them when the user does not already have local copies.
+   - Remaining gap: existing hardcoded local copies are preserved, so the dashboard should offer an explicit "replace with managed script" migration.
 
 2. Make config actually drive behavior.
-   - Evidence: `lib/config.sh` loads `TTL_VALUE`, `DNS_SERVER`, `LOG_LEVEL`, and related settings, but does not load `BYPASS_SCRIPT` or `DISABLE_SCRIPT` from config despite `config/throttle-me.conf` defining them.
-   - Evidence: external `/home/wtyler/.local/bin/bypass-tethering` hardcodes TTL 65 and DNS `1.1.1.1`/`1.0.0.1`.
-   - Evidence: presets in `lib/presets.sh` set `TTL_VALUE` and `DNS_SERVER`, but loading a preset does not persist settings and does not change the hardcoded external script.
-   - Recommendation: replace hardcoded external script values with generated/app-owned rule application, or pass config through environment/flags to a parameterized engine.
+   - Status: partially done. `lib/config.sh` now honors script paths and dashboard/daemon settings, and `lib/core.sh` passes `TTL_VALUE`, `HL_VALUE`, and `DNS_SERVER` into the shipped scripts.
+   - Remaining gap: the live dashboard profiles save config, but legacy/local scripts can still disagree with config unless migrated.
 
 3. Correct the DNS privacy claim.
-   - Evidence: `/home/wtyler/.local/bin/bypass-tethering` lines 33-47 write plain `nameserver` entries and DNAT port 53 to `1.1.1.1:53`.
+   - Status: done for current wording. The dashboard and shipped scripts now describe this as public DNS redirection on port 53, not DoH/DoT.
    - Evidence: the iptables man page documents DNAT as destination address rewriting, not encryption: https://people.netfilter.org/kadlec/ipset/iptables.man.html
-   - Recommendation: either relabel this as "public DNS redirection" or add a real local DoH/DoT resolver path and verify it.
+   - Recommendation: add a separate encrypted local resolver mode only if transport verification can prove it.
 
 4. Fix status semantics.
-   - Evidence: `lib/iptables.sh` marks overall status `ACTIVE` if IPv4 bypass is active or IPv6 hop-limit is active.
-   - Evidence: PRD defines partial states where TTL and DNS can differ, but current CLI collapses this into active/inactive.
-   - Recommendation: report `ACTIVE`, `PARTIAL`, `INACTIVE`, and `UNKNOWN`, with explicit rows for IPv4 TTL, IPv4 DNS, IPv6 HL, IPv6 DNS, DNS config, DNS lock, and wire-level packet counters.
+   - Status: mostly done. CLI/dashboard now expose `ACTIVE`, `PARTIAL`, `INACTIVE`, and `UNKNOWN`, plus IPv4 TTL, IPv4 DNS, IPv6 HL, IPv6 DNS, DNS config, DNS lock, and packet counters where sudo permits.
+   - Remaining gap: add wire-level TTL verification and nftables backend detection.
 
 ### P1 - Safety, daemon reliability, and supportability
 
@@ -121,16 +119,18 @@ Market implication: do not try to out-feature phone apps or routers broadly. Win
 What works:
 
 - The CLI surface is compact and useful: `-e`, `-d`, `-s`, `-t`, `-D`, presets, and stats.
-- The TUI organizes the right mental model: enable, disable, status, speed, monitor, statistics, presets, settings.
-- Confirmation prompts reduce accidental state changes.
+- The command-center dashboard now organizes the right mental model: evidence, commands, diagnostics, traffic, sessions, settings, logs, and live config.
+- Native command palette support gives keyboard-first operation without hunting through buttons.
+- Confirmation prompts now use Textual callbacks instead of `push_screen_wait`, avoiding the `NoActiveWorker` crash.
+- The smart inspector answers the next-action question and shows readiness, warning counts, profile hints, and recent command history.
 
 Main UX risks:
 
 - Normal empty state can look like failure. `./throttle-me -p` prints "No saved presets found" and exits through the error trap with "Script exited with code 1".
 - Version output is noisy. `./throttle-me -v` logs config loading before printing version.
-- TUI enable/disable suppresses underlying script output. If a dependency or sudo condition fails, the user may lose useful context.
-- Settings feel persistent but are runtime-only.
-- The theme is expressive, but fixed-width boxes and ANSI escape sequences make status text fragile when lines are long or colorized.
+- Some destructive actions still depend on external scripts and sudo behavior; the dashboard surfaces output, but the product needs transactional verification.
+- Existing local scripts can disagree with dashboard config; this is visible in diagnostics but not yet one-click repair.
+- Dense terminal layouts remain sensitive to very narrow widths, though the right rail now hides below 140 columns.
 
 Recommended UX principle: every screen should answer three questions clearly: "What is active?", "How do we know?", and "What will be changed if I continue?"
 
@@ -141,64 +141,54 @@ Recommended UX principle: every screen should answer three questions clearly: "W
 Command:
 
 ```bash
-scc throttle-me throttle-me-daemon install.sh test-theme.sh lib config docs PRD.md --no-cocomo
+scc throttle-me throttle-me-daemon install.sh test-theme.sh lib config docs PRD.md dashboard --no-cocomo
 ```
 
 Result:
 
 | Language | Files | Lines | Code | Comments | Complexity |
 |---|---:|---:|---:|---:|---:|
-| Shell | 15 | 2660 | 1918 | 307 | 236 |
-| BASH | 2 | 432 | 339 | 45 | 38 |
-| Markdown | 4 | 3225 | 2434 | 0 | 0 |
+| Shell | 15 | 2823 | 2054 | 320 | 273 |
+| Python | 7 | 1441 | 1228 | 1 | 285 |
+| Markdown | 5 | 3258 | 2459 | 0 | 0 |
+| BASH | 2 | 440 | 356 | 40 | 37 |
 | Systemd | 1 | 24 | 20 | 0 | 0 |
-| Total | 22 | 6341 | 4711 | 352 | 274 |
+| TOML | 1 | 26 | 22 | 0 | 1 |
+| Total | 31 | 8012 | 6139 | 361 | 596 |
 
-Interpretation: code volume is manageable. Complexity is concentrated in UI/daemon/status functions, not the core wrapper.
+Interpretation: code volume is still manageable, but the new Python dashboard roughly doubles measured complexity. The highest-risk complexity now lives in collectors/renderers plus the older shell status/daemon/rule checks.
 
 ### lizard
 
 Command:
 
 ```bash
-lizard -C 8 -L 50 throttle-me throttle-me-daemon install.sh test-theme.sh lib/*.sh
+lizard -C 8 -L 50 throttle-me throttle-me-daemon install.sh test-theme.sh lib/*.sh dashboard/src/throttle_me_dashboard/*.py
 ```
 
-Result: 101 functions, average CCN 2.9, 9 warnings under tightened thresholds.
+Result: 177 functions, average CCN 3.1, 14 warnings under tightened thresholds. `lizard` exits non-zero because these threshold warnings are intentionally strict.
 
 Hotspots:
 
-- `lib/ui-dialog.sh:349` `ui_settings` - CCN 12, length 98
-- `lib/daemon.sh:107` `daemon_status` - CCN 10, length 61
-- `lib/core.sh:72` `show_status` - CCN 9, length 52
-- `lib/iptables.sh:46` `get_bypass_status` - CCN 8, length 52
-- `lib/retention.sh:7` `apply_retention_policy` - length 78
-- `lib/ui-dialog.sh:262` `ui_daemon_control` - length 85
-- `lib/ui-theme.sh:42` `create_dialog_theme` - length 72
+- `dashboard/src/throttle_me_dashboard/collectors.py:373` `collect_snapshot` - CCN 21, length 70
+- `dashboard/src/throttle_me_dashboard/collectors.py:232` `network_info` - CCN 17
+- `dashboard/src/throttle_me_dashboard/collectors.py:351` `diagnostics` - CCN 15
+- `dashboard/src/throttle_me_dashboard/renderers.py:155` `render_inspector` - CCN 13
+- `dashboard/src/throttle_me_dashboard/renderers.py:185` `render_overview` - CCN 9, length 57
+- `lib/iptables.sh:60` `get_bypass_status` - CCN 11, length 60
+- `lib/core.sh:76` `show_status` - CCN 10, length 59
+- `lib/daemon.sh:108` `daemon_status` - CCN 10, length 61
+- `lib/utils.sh:60` `launch_dashboard` - CCN 10
 
 ### shellcheck
 
 Required command:
 
 ```bash
-shellcheck throttle-me lib/*.sh
+shellcheck throttle-me throttle-me-daemon install.sh test-theme.sh lib/*.sh scripts/*
 ```
 
-Result: failed with 32 warnings, 55 info findings, and 429 style findings. The style bulk is mostly SC2250 brace style. Correctness warnings cluster around cross-file globals, sourced state files, unused variables, and one declare-and-assign warning.
-
-Expanded command:
-
-```bash
-shellcheck throttle-me throttle-me-daemon install.sh lib/*.sh
-```
-
-Result: 34 warnings, 64 info findings, and 524 style findings.
-
-High-signal warning themes:
-
-- SC2154 cross-module globals: `CONFIG`, colors, session variables, `STATS_FILE`, and sourced session values.
-- SC2034 unused state: `DAEMON_SCRIPT`, `has_active_session`, `LAST_CHECK`.
-- SC2155 masked return values in `lib/retention.sh` and `install.sh`.
+Result: passed with no findings.
 
 ### Syntax and smoke checks
 
@@ -211,6 +201,9 @@ for f in lib/*.sh; do bash -n "$f"; done
 bash -n install.sh
 ./throttle-me -v
 ./throttle-me -D status
+uv run --project dashboard --extra test pytest -q
+uv run --project dashboard throttle-me-dashboard --smoke
+python3 -m compileall dashboard/src dashboard/tests
 ```
 
 Not run:
@@ -221,18 +214,17 @@ Not run:
 
 ### Milestone 1: Trustworthy Core
 
-- Vendor or generate bypass/disable scripts.
-- Parameterize TTL, HL, DNS, and interface.
+- Add managed-script migration for existing installs that still point at older local bypass/disable scripts.
 - Use owned iptables/nftables chains instead of flushing shared chains.
-- Add `ACTIVE/PARTIAL/INACTIVE/UNKNOWN` status.
-- Fix DNS language or implement actual encrypted DNS.
-- Add `doctor` with no state mutation.
+- Add transactional enable/disable with snapshot, verify, and rollback.
+- Add wire-level TTL verification and nftables backend detection.
+- Add a real encrypted DNS mode only if transport verification can prove DoH/DoT.
 
 ### Milestone 2: Reliable Automation
 
 - Normalize daemon sudoers docs and installer output.
 - Remove duplicate daemon code.
-- Persist TUI settings to config.
+- Add first-run prerequisite checks and dashboard repair flows.
 - Make `AUTO_ENABLE` state explicit during daemon start.
 - Add NetworkManager event support as an optional faster path, with polling fallback.
 
@@ -269,18 +261,27 @@ Not run:
 6. Claude/Codex Handoff Pack
    - Generate a markdown diagnostics artifact with command outputs, status evidence, config, shellcheck summary, and suggested next action. This fits the repo's multi-agent workflow.
 
+## Dashboard Research Notes
+
+The new dashboard direction borrows from current terminal command-center patterns:
+
+- Textual's native command palette supports discoverable app commands without building a fragile custom search modal. That became the `p`/`ctrl+p` palette with view, action, profile, doctor, save, and repeat commands.
+- Textual workers support keeping long-running commands off the UI loop. That shaped the command-in-flight guard and worker-backed CLI execution.
+- K9s/lazygit-style operation favors command search, dense keyboard navigation, and immediate context over wizard-like menu hopping.
+- btop-style dashboards emphasize compact evidence panels and live state, which informed the status strip, readiness meter, traffic panel, and smart inspector.
+
 ## Product Health Scorecard
 
 | Area | Score | Rationale |
 |---|---:|---|
 | Value proposition | 8/10 | Clear personal workflow and real pain point. |
-| Installability | 3/10 | Missing external scripts block fresh users. |
-| Configuration integrity | 4/10 | Many settings do not affect actual rule behavior. |
-| Observability | 6/10 | Good start, but partial/silent failures are under-reported. |
-| Automation | 5/10 | Daemon exists but needs privilege, config, and state hardening. |
-| UX clarity | 6/10 | Strong menu shape; empty states/noisy logs need cleanup. |
-| Maintainability | 6/10 | Small modular Bash, but shellcheck warning debt and cross-file globals need work. |
-| Testability | 3/10 | No automated tests around the dangerous paths yet. |
+| Installability | 6/10 | Fresh installs now get managed scripts and dashboard files, but existing local scripts need migration. |
+| Configuration integrity | 6/10 | Dashboard saves config and shipped scripts accept TTL/HL/DNS, but legacy scripts can still drift. |
+| Observability | 7/10 | Dashboard shows partial/unknown states, diagnostics, inspector, logs, and sessions; wire-level proof still missing. |
+| Automation | 5/10 | Daemon exists but needs privilege, prerequisite, and event-driven hardening. |
+| UX clarity | 8/10 | Command-center dashboard is now keyboard-first, diagnostic, responsive, and much more understandable. |
+| Maintainability | 6/10 | Shellcheck is clean, but complexity moved into collectors/renderers and still needs tests around dangerous paths. |
+| Testability | 5/10 | Dashboard has automated smoke/regression tests; firewall/DNS behavior still lacks safe integration tests. |
 
 Overall: promising early-stage product, but not yet trustworthy enough to call production-ready.
 
@@ -292,3 +293,8 @@ Overall: promising early-stage product, but not yet trustworthy enough to call p
 - GL.iNet tethering docs: https://docs.gl-inet.com/router/en/4/interface_guide/internet_tethering/
 - GL.iNet EasyTether docs: https://docs.gl-inet.com/router/en/2/app/tether/
 - iptables man page mirror: https://people.netfilter.org/kadlec/ipset/iptables.man.html
+- Textual command palette docs: https://textual.textualize.io/guide/command_palette/
+- Textual worker docs: https://textual.textualize.io/guide/workers/
+- K9s command-mode docs: https://k9scli.io/topics/commands/
+- LazyGit project reference: https://github.com/jesseduffield/lazygit
+- btop project reference: https://github.com/aristocratos/btop

@@ -54,6 +54,134 @@ def kv_table(rows: list[tuple[str, str, str | None]]) -> Table:
     return table
 
 
+def next_action(snapshot: Snapshot) -> tuple[str, str]:
+    critical = [item for item in snapshot.diagnostics if item.state == "critical"]
+    warnings = [item for item in snapshot.diagnostics if item.state == "warn"]
+    if critical:
+        return ("Fix diagnostics", f"{critical[0].name}: {critical[0].detail}")
+    if snapshot.overall == "PARTIAL":
+        return ("Inspect partial state", "Open Diagnostics before toggling; one layer is active without the full path.")
+    if snapshot.overall == "UNKNOWN":
+        return ("Unlock visibility", "sudo is not cached, so firewall status is unknown. Use a confirmed action or run sudo -v.")
+    if snapshot.overall == "ACTIVE":
+        if warnings:
+            return ("Monitor and verify", f"Bypass is active. Watch {warnings[0].name.lower()} when you have a minute.")
+        return ("Stay on monitor", "Bypass looks active. Watch traffic and session counters.")
+    if warnings:
+        return ("Review warnings", f"Inactive with warning: {warnings[0].name}. Diagnostics has the details.")
+    return ("Enable when ready", "Press e or click Enable after connecting to the hotspot.")
+
+
+def readiness_score(snapshot: Snapshot) -> tuple[int, str]:
+    score = 100
+    if snapshot.overall == "ACTIVE":
+        score -= 0
+    elif snapshot.overall == "PARTIAL":
+        score -= 35
+    elif snapshot.overall == "UNKNOWN":
+        score -= 45
+    else:
+        score -= 20
+
+    for item in snapshot.diagnostics:
+        if item.state == "critical":
+            score -= 18
+        elif item.state == "warn":
+            score -= 7
+
+    score = max(0, min(score, 100))
+    if score >= 85:
+        return score, "ready"
+    if score >= 60:
+        return score, "watch"
+    if score >= 35:
+        return score, "risky"
+    return score, "blocked"
+
+
+def recommended_profile(snapshot: Snapshot) -> tuple[str, str]:
+    ssid = snapshot.ssid.lower()
+    if "iphone" in ssid or "ipad" in ssid:
+        return ("iPhone", "TTL/HL 65 with Cloudflare DNS")
+    if "android" in ssid or "galaxy" in ssid or "pixel" in ssid:
+        return ("Android", "TTL/HL 64 with Cloudflare DNS")
+    if snapshot.overall == "PARTIAL":
+        return ("Repair", "Keep current profile, inspect the partial firewall layer first")
+    return ("Standard", "TTL/HL 65 with Cloudflare DNS")
+
+
+def meter(value: int) -> str:
+    filled = max(0, min(value // 5, 20))
+    return "█" * filled + "░" * (20 - filled)
+
+
+def clip(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return f"{value[: max(limit - 1, 0)]}…"
+
+
+def doctor_report(snapshot: Snapshot) -> str:
+    score, label = readiness_score(snapshot)
+    lines = [
+        f"Readiness: {score}/100 ({label})",
+        f"State: {snapshot.overall}",
+        f"Network: {snapshot.interface} / {snapshot.ssid}",
+        f"DNS: {snapshot.dns_config}; lock={snapshot.dns_lock}; transport={snapshot.dns_transport}",
+        "",
+        "Priority findings:",
+    ]
+    findings = [item for item in snapshot.diagnostics if item.state != "ok"]
+    if findings:
+        lines.extend(f"- {item.state.upper()} {item.name}: {item.detail}" for item in findings[:10])
+    else:
+        lines.append("- OK no diagnostic warnings")
+    return "\n".join(lines)
+
+
+def render_status_strip(snapshot: Snapshot):
+    action, detail = next_action(snapshot)
+    line = Text()
+    line.append(f"STATE {snapshot.overall}", style=STATUS_STYLE.get(snapshot.overall, "white"))
+    line.append("  |  ", style="dim")
+    line.append(f"SSID {clip(snapshot.ssid, 18)}", style="white")
+    line.append("  |  ", style="dim")
+    line.append(f"SUDO {'READY' if snapshot.sudo_ready else 'LOCKED'}", style="green" if snapshot.sudo_ready else "yellow")
+    line.append("  |  ", style="dim")
+    line.append(f"{action}: {clip(detail, 74)}", style="cyan")
+    return Panel(line, border_style=STATUS_STYLE.get(snapshot.overall, "cyan").split()[-1], box=box.HEAVY, padding=(0, 1))
+
+
+def render_inspector(snapshot: Snapshot, command_output: str, command_history: list[str] | None = None):
+    action, detail = next_action(snapshot)
+    score, label = readiness_score(snapshot)
+    profile, profile_detail = recommended_profile(snapshot)
+    score_style = "green" if score >= 85 else "yellow" if score >= 60 else "red"
+    critical = sum(1 for item in snapshot.diagnostics if item.state == "critical")
+    warns = sum(1 for item in snapshot.diagnostics if item.state == "warn")
+    installed = sum(1 for present in snapshot.dependencies.values() if present)
+    total_deps = len(snapshot.dependencies)
+
+    body = Text()
+    body.append(f"{score:03d}/100 {label.upper()}\n", style=f"bold {score_style}")
+    body.append(f"{meter(score)}\n\n", style=score_style)
+    body.append("Next move\n", style="bold cyan")
+    body.append(f"{action}\n", style="white")
+    body.append(f"{detail}\n\n", style="dim")
+    body.append(f"Signals  critical={critical}  warn={warns}  deps={installed}/{total_deps}\n", style="white")
+    body.append(f"Profile  {profile}: {profile_detail}\n", style="white")
+    body.append(f"Rules    ttl={snapshot.ipv4_ttl} dns={snapshot.ipv4_dns} v6={snapshot.ipv6_hl}/{snapshot.ipv6_dns}\n", style="white")
+    body.append(f"Traffic  rx={human_bytes(snapshot.rx_rate)}/s tx={human_bytes(snapshot.tx_rate)}/s\n", style="white")
+    history = command_history or []
+    if history:
+        body.append("\nHistory\n", style="bold cyan")
+        for entry in history[:3]:
+            body.append(f"{clip(entry, 34)}\n", style="dim")
+    elif command_output.strip():
+        body.append("\nLast command captured in Control view.\n", style="dim")
+    return card("SMART INSPECTOR", body, score_style)
+
+
 def render_overview(snapshot: Snapshot) -> Group:
     status = Text(snapshot.overall, style=STATUS_STYLE.get(snapshot.overall, "white"))
     status.append(f"  {datetime.fromtimestamp(snapshot.timestamp).strftime('%H:%M:%S')}", style="dim")
@@ -106,7 +234,11 @@ def render_overview(snapshot: Snapshot) -> Group:
             warn_text.append(f"{item.detail}\n", style="white")
     else:
         warn_text.append("No warnings detected in read-only diagnostics.", style="green")
-    return Group(status, "\n", top, "\n", net, "\n", daemon, "\n", card("WARNINGS", warn_text, "yellow" if warnings else "green"))
+    action, detail = next_action(snapshot)
+    brief = Text()
+    brief.append(f"{action}\n", style="bold cyan")
+    brief.append(detail, style="white")
+    return Group(status, "\n", card("OPERATOR BRIEF", brief, "cyan"), "\n", top, "\n", net, "\n", daemon, "\n", card("WARNINGS", warn_text, "yellow" if warnings else "green"))
 
 
 def render_control(snapshot: Snapshot, command_output: str) -> Group:
@@ -115,20 +247,44 @@ def render_control(snapshot: Snapshot, command_output: str) -> Group:
     shortcuts.append(" enable  ")
     shortcuts.append("d", style="bold red")
     shortcuts.append(" disable  ")
+    shortcuts.append("u", style="bold white")
+    shortcuts.append(" cli status  ")
     shortcuts.append("s", style="bold cyan")
     shortcuts.append(" daemon start  ")
     shortcuts.append("x", style="bold yellow")
     shortcuts.append(" daemon stop  ")
     shortcuts.append("t", style="bold magenta")
-    shortcuts.append(" speed test\n\n")
-    shortcuts.append("Actions use the existing throttle-me CLI and stream the last command result here.", style="dim")
+    shortcuts.append(" speed test  ")
+    shortcuts.append("a", style="bold blue")
+    shortcuts.append(" toggle auto\n\n")
+    shortcuts.append("Click the left rail buttons or use hotkeys. Confirmed actions call the existing throttle-me CLI and report here.", style="dim")
     output = command_output or "No command run yet."
+    runbook = Table.grid(expand=True)
+    runbook.add_column(ratio=1, style="dim")
+    runbook.add_column(ratio=2)
+    runbook.add_row("1 Detect", f"{snapshot.interface} / {snapshot.ssid}")
+    runbook.add_row("2 Prepare", "sudo ready" if snapshot.sudo_ready else "sudo locked")
+    runbook.add_row("3 Apply", snapshot.overall)
+    runbook.add_row("4 Verify", f"TTL {snapshot.ipv4_ttl}, DNS {snapshot.ipv4_dns}, lock {snapshot.dns_lock}")
+    runbook.add_row("5 Monitor", f"RX {human_bytes(snapshot.rx_rate)}/s, TX {human_bytes(snapshot.tx_rate)}/s")
     return Group(
         card("COMMANDS", shortcuts, "green"),
         "\n",
+        card("RUNBOOK", runbook, "magenta"),
+        "\n",
         card("LAST COMMAND OUTPUT", Text(output[-4000:], style="white"), "cyan"),
         "\n",
-        card("CURRENT STATE", kv_table([("Overall", snapshot.overall, STATUS_STYLE.get(snapshot.overall)), ("Sudo", "ready" if snapshot.sudo_ready else "not cached", "green" if snapshot.sudo_ready else "yellow")]), "cyan"),
+        card(
+            "CURRENT STATE",
+            kv_table(
+                [
+                    ("Overall", snapshot.overall, STATUS_STYLE.get(snapshot.overall)),
+                    ("Sudo", "ready" if snapshot.sudo_ready else "not cached", "green" if snapshot.sudo_ready else "yellow"),
+                    ("Auto-enable", snapshot.config.get("AUTO_ENABLE", "false"), "green" if snapshot.config.get("AUTO_ENABLE") == "true" else "yellow"),
+                ]
+            ),
+            "cyan",
+        ),
     )
 
 
@@ -175,7 +331,7 @@ def render_settings(snapshot: Snapshot) -> Group:
     rows = []
     for key in ["TTL_VALUE", "HL_VALUE", "DNS_SERVER", "AUTO_ENABLE", "INTERFACE_OVERRIDE", "MAX_SESSIONS", "MAX_AGE_DAYS", "BYPASS_SCRIPT", "DISABLE_SCRIPT"]:
         rows.append((key, snapshot.config.get(key, ""), None))
-    note = Text(f"Config source: {snapshot.config_path}\nPress ctrl+s to save current dashboard config defaults.", style="dim")
+    note = Text(f"Config source: {snapshot.config_path}\nPress a to toggle AUTO_ENABLE. Press ctrl+s to save current dashboard config defaults.", style="dim")
     return Group(card("SETTINGS", kv_table(rows), "cyan"), "\n", card("SAVE POLICY", note, "yellow"))
 
 
