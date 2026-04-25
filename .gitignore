@@ -1,0 +1,33 @@
+# Editor files
+*~
+*.swp
+*.swo
+.*.sw?
+
+# IDE files
+.vscode/
+.idea/
+
+# Backup files
+*.bak
+*.backup
+
+# Logs
+*.log
+
+# Python dashboard local runtime
+__pycache__/
+.pytest_cache/
+dashboard/.venv/
+
+# Sensitive data
+.env
+*.key
+*.pem
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS files
+.DS_Store
+Thumbs.db

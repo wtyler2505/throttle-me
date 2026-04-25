@@ -7,6 +7,15 @@ Scope: feature gap analysis, competitive comparison, UX evaluation, tech debt au
 
 `throttle-me` has a clear, useful product wedge: make a fragile Linux hotspot-bypass workflow understandable, observable, and reversible from a TUI/CLI. The modular Bash structure is small enough to keep moving quickly, and the product already has a stronger operations surface than a one-off script: status, daemon controls, presets, session history, retention, and docs.
 
+Implementation progress started after this analysis:
+
+- Added a new Textual command-center dashboard as the default `throttle-me` no-arg UI, with `--classic` retaining the old dialog UI.
+- Added a Python read/diagnostic layer that reports active/partial/inactive/unknown state without mutating firewall or DNS state.
+- Added repo-shipped `scripts/bypass-tethering` and `scripts/disable-bypass-tethering` so fresh installs have concrete script sources.
+- Updated config loading so script paths and dashboard/daemon settings are honored.
+- Relabeled DNS behavior as public DNS redirection rather than encrypted DoH/DoT.
+- Aligned installer and daemon docs around command-scoped sudoers guidance.
+
 The biggest gaps are product-truth gaps, not missing polish:
 
 1. Installability is broken for a fresh clone. The docs tell users to copy `bypass-tethering` and `disable-bypass-tethering`, but those scripts are not in the repo, and `install.sh` does not install them. `lib/core.sh` still depends on the external scripts.

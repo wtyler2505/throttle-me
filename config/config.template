@@ -1,0 +1,91 @@
+# throttle-me Configuration Template
+# Copy this file to: ~/.config/throttle-me/config
+# Then edit values as needed
+
+# ==============================================================================
+# BYPASS CONFIGURATION
+# ==============================================================================
+
+# TTL (Time To Live) value to set for bypass
+# iPhone default: 65, Android default: 64
+# Most carriers detect tethering when TTL is decremented
+TTL_VALUE=65
+
+# IPv6 Hop Limit (equivalent to TTL for IPv6)
+# iPhone-style bypass default: 65
+HL_VALUE=65
+
+# DNS server to use for public DNS redirection
+# Cloudflare: 1.1.1.1, Google: 8.8.8.8, Quad9: 9.9.9.9
+DNS_SERVER="1.1.1.1"
+
+# ==============================================================================
+# DAEMON SETTINGS
+# ==============================================================================
+
+# Automatically enable bypass when connecting to detected mobile hotspots
+# true = Auto-enable on hotspot connection
+# false = Manual control only
+AUTO_ENABLE=false
+
+# How often (in seconds) the daemon checks for network changes
+# Lower = faster detection, higher CPU usage
+# Higher = slower detection, lower CPU usage
+# Recommended: 5-10 seconds
+POLL_INTERVAL=5
+
+# ==============================================================================
+# USER INTERFACE
+# ==============================================================================
+
+# Show confirmation dialog before enabling bypass
+# true = Prompt user for confirmation
+# false = Enable immediately without prompt
+CONFIRM_ENABLE=true
+
+# Show confirmation dialog before disabling bypass
+# true = Prompt user for confirmation
+# false = Disable immediately without prompt
+CONFIRM_DISABLE=true
+
+# ==============================================================================
+# SESSION TRACKING & RETENTION
+# ==============================================================================
+
+# Maximum number of session records to keep in history
+# Older sessions beyond this limit will be deleted
+# Set to 0 for unlimited (not recommended)
+MAX_SESSIONS=100
+
+# Maximum age (in days) to keep session records
+# Sessions older than this will be deleted regardless of count
+# Set to 0 to disable age-based cleanup
+MAX_AGE_DAYS=30
+
+# ==============================================================================
+# NETWORK DETECTION
+# ==============================================================================
+
+# Override automatic wireless interface detection
+# Leave empty for auto-detection (recommended)
+# Set to specific interface name if auto-detection fails
+# Examples: wlan0, wlp3s0, wlo1
+INTERFACE_OVERRIDE=""
+
+# Known mobile hotspot SSID patterns (space-separated)
+# Daemon will auto-enable bypass when connecting to these
+# Supports wildcards: "Tyler's iPhone" "iPhone*" "AndroidAP*"
+HOTSPOT_PATTERNS="iPhone* AndroidAP* *Galaxy*"
+
+# ==============================================================================
+# ADVANCED SETTINGS
+# ==============================================================================
+
+# Speed test timeout (in seconds)
+# How long to wait for speed test to complete
+# Increase if you have slow connection
+SPEED_TEST_TIMEOUT=30
+
+# Notification urgency level for daemon notifications
+# low, normal, critical
+NOTIFICATION_URGENCY="normal"

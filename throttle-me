@@ -1,0 +1,269 @@
+#!/bin/bash
+# throttle-me v2.0 - TUI for managing carrier hotspot bypass
+# Modular, tested, production-ready
+
+# Bash strict mode
+set -euo pipefail
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source all library modules
+source "$SCRIPT_DIR/lib/logging.sh"
+source "$SCRIPT_DIR/lib/utils.sh"
+source "$SCRIPT_DIR/lib/config.sh"
+source "$SCRIPT_DIR/lib/network.sh"
+source "$SCRIPT_DIR/lib/iptables.sh"
+source "$SCRIPT_DIR/lib/core.sh"
+source "$SCRIPT_DIR/lib/presets.sh"
+source "$SCRIPT_DIR/lib/stats.sh"
+source "$SCRIPT_DIR/lib/retention.sh"
+source "$SCRIPT_DIR/lib/detection.sh"
+source "$SCRIPT_DIR/lib/daemon.sh"
+source "$SCRIPT_DIR/lib/ui-theme.sh"
+source "$SCRIPT_DIR/lib/ui-dialog.sh"
+
+# Trap handlers
+trap cleanup EXIT
+trap 'error_handler $? $LINENO "$BASH_COMMAND"' ERR
+
+# Initialize
+initialize_logging
+load_config
+
+# Long options for UI selection. Short CLI flags below remain unchanged.
+case "${1:-}" in
+    --classic)
+        shift
+        start_sudo_cache
+        log_info "Starting classic dialog UI"
+        start_tui "$@"
+        exit $?
+        ;;
+    --dashboard)
+        shift
+        log_info "Starting command center dashboard"
+        launch_dashboard "$@"
+        exit $?
+        ;;
+    --dashboard-smoke)
+        shift
+        launch_dashboard --smoke "$@"
+        exit $?
+        ;;
+esac
+
+# Parse command line arguments
+CLI_MODE=false
+
+while getopts "edsmtvpl:SHai:cD:" opt; do
+    case $opt in
+        e)
+            CLI_MODE=true
+            start_sudo_cache
+            log_info "CLI mode: Enable bypass"
+            enable_bypass
+            exit $?
+            ;;
+        d)
+            CLI_MODE=true
+            start_sudo_cache
+            log_info "CLI mode: Disable bypass"
+            disable_bypass
+            exit $?
+            ;;
+        s)
+            CLI_MODE=true
+            start_sudo_cache
+            show_status
+            exit 0
+            ;;
+        m)
+            CLI_MODE=true
+            log_info "CLI mode: Real-time monitor"
+            iface=$(detect_wireless_interface) || {
+                echo "Error: No wireless interface detected"
+                exit 1
+            }
+            clear
+            echo "Starting real-time network monitor (press 'q' to quit)..."
+            echo "Interface: $iface"
+            sleep 1
+            bmon -p "$iface" -o curses:rxlist=1:txlist=1
+            exit 0
+            ;;
+        t)
+            CLI_MODE=true
+            log_info "CLI mode: Speed test"
+            run_speed_test
+            exit 0
+            ;;
+        p)
+            CLI_MODE=true
+            log_info "CLI mode: List presets"
+            show_presets
+            exit 0
+            ;;
+        l)
+            CLI_MODE=true
+            log_info "CLI mode: Load preset '$OPTARG'"
+            load_saved_preset "$OPTARG"
+            exit 0
+            ;;
+        S)
+            CLI_MODE=true
+            start_sudo_cache
+            log_info "CLI mode: Current session stats"
+            get_current_session || echo "No active session"
+            exit 0
+            ;;
+        H)
+            CLI_MODE=true
+            log_info "CLI mode: Session history"
+            get_session_stats
+            exit 0
+            ;;
+        a)
+            CLI_MODE=true
+            log_info "CLI mode: Auto-detection mode"
+            show_detection_info
+            echo ""
+            read -rp "Enable auto-detection? (y/n): " response
+            if [[ "$response" =~ ^[Yy]$ ]]; then
+                auto_enable_if_hotspot && echo "✅ Auto-enable successful" || echo "❌ Not on mobile hotspot"
+            fi
+            exit 0
+            ;;
+        i)
+            CLI_MODE=true
+            log_info "CLI mode: Interface override '$OPTARG'"
+            CONFIG[INTERFACE_OVERRIDE]="$OPTARG"
+            echo "Interface override set to: $OPTARG"
+            detect_wireless_interface || echo "Warning: Interface may not be valid"
+            exit 0
+            ;;
+        c)
+            CLI_MODE=true
+            start_sudo_cache
+            log_info "CLI mode: Manual retention cleanup"
+            show_retention_info
+            echo ""
+            read -rp "Apply retention policy now? (y/n): " response
+            if [[ "$response" =~ ^[Yy]$ ]]; then
+                manual_cleanup
+            fi
+            exit 0
+            ;;
+        D)
+            CLI_MODE=true
+            case "$OPTARG" in
+                start)
+                    daemon_start
+                    exit $?
+                    ;;
+                stop)
+                    daemon_stop
+                    exit $?
+                    ;;
+                status)
+                    daemon_status
+                    exit $?
+                    ;;
+                enable)
+                    daemon_enable
+                    exit $?
+                    ;;
+                disable)
+                    daemon_disable
+                    exit $?
+                    ;;
+                restart)
+                    daemon_restart
+                    exit $?
+                    ;;
+                logs)
+                    daemon_logs
+                    exit $?
+                    ;;
+                follow)
+                    daemon_logs_follow
+                    exit $?
+                    ;;
+                *)
+                    echo "Invalid daemon action: $OPTARG" >&2
+                    echo "Valid actions: start, stop, status, enable, disable, restart, logs, follow" >&2
+                    exit 1
+                    ;;
+            esac
+            ;;
+        v)
+            show_version
+            exit 0
+            ;;
+        \?)
+            cat >&2 <<'EOF'
+throttle-me - Carrier hotspot throttling bypass manager
+
+USAGE:
+    throttle-me [OPTIONS]
+    
+    No options: Launch command-center dashboard
+    --dashboard          Launch command-center dashboard explicitly
+    --dashboard-smoke    Run non-interactive dashboard smoke check
+    --classic            Launch legacy dialog TUI menu
+
+BYPASS CONTROL:
+    -e                  Enable bypass (TTL modification + DNS redirection)
+    -d                  Disable bypass (restore normal network settings)
+    -s                  Show current bypass status and network info
+
+MONITORING:
+    -m                  Real-time network monitor (bmon interface)
+    -t                  Run speed test (measure download/upload speeds)
+    -S                  Show current session statistics
+    -H                  Show session history (all past sessions)
+
+PRESETS:
+    -p                  List all saved presets
+    -l <preset>         Load and apply a saved preset configuration
+
+DAEMON CONTROL:
+    -D start            Start background daemon (auto-detection)
+    -D stop             Stop background daemon
+    -D restart          Restart background daemon
+    -D status           Show daemon status and logs
+    -D enable           Enable daemon auto-start on boot
+    -D disable          Disable daemon auto-start
+    -D logs             View daemon logs (last 50 lines)
+    -D follow           Follow daemon logs in real-time
+
+ADVANCED:
+    -a                  Auto-detect mobile hotspot and enable bypass
+    -i <interface>      Override wireless interface (e.g., wlan0, wlo1)
+    -c                  Manual cleanup (apply retention policy now)
+    -v                  Show version information
+
+EXAMPLES:
+    throttle-me              # Launch command-center dashboard
+    throttle-me -e           # Enable bypass (CLI)
+    throttle-me -t           # Run speed test
+    throttle-me -D start     # Start daemon
+    throttle-me -l "iPhone"  # Load iPhone preset
+
+DOCUMENTATION:
+    Quick Start:  docs/QUICKSTART.md
+    Daemon Guide: docs/DAEMON.md
+    Full PRD:     PRD.md
+
+For more information, visit: https://github.com/user/throttle-me
+EOF
+            exit 1
+            ;;
+    esac
+done
+
+# If no CLI args, start TUI
+if [[ "$CLI_MODE" == "false" ]]; then
+    log_info "Starting command center dashboard"
+    launch_dashboard
+fi

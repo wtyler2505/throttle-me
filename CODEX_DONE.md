@@ -1,55 +1,65 @@
 # Codex Completion Report
 
-**Task:** Product analysis for throttle-me: feature gap analysis, competitive comparison, UX evaluation, tech debt audit with `scc`/`lizard`, and innovation proposals.
+**Task:** Implement the new `throttle-me` command-center TUI/dashboard and begin product-analysis P0/P1 remediation.
 **Status:** done
 
 ## Changes Made
 
-- `PRODUCT_ANALYSIS.md` - Added full product analysis, competitive matrix, feature gaps, UX findings, tech debt metrics, roadmap, innovation proposals, and sources.
-- `CODEX_DONE.md` - Added this structured completion report for Claude/Tyler handoff.
+- `dashboard/` - Added a Textual/Rich Python command-center with overview, control, diagnostics, monitor, sessions, settings, logs, keybindings, smoke mode, and focused tests.
+- `throttle-me` - Made the dashboard the default no-arg UI and added `--dashboard`, `--dashboard-smoke`, and `--classic`.
+- `lib/utils.sh` - Added dashboard launcher with `uv` support and Python virtualenv fallback.
+- `lib/config.sh` - Loaded missing dashboard/daemon/script settings and IPv6 hop-limit configuration.
+- `lib/core.sh` - Passed configured TTL, HL, and DNS settings into bypass scripts and improved partial status display.
+- `lib/iptables.sh` - Added partial-state detection, IPv6 HL config support, DNS lock verification, and truthful DNS transport wording.
+- `scripts/bypass-tethering` - Added repo-shipped enable script for fresh installs.
+- `scripts/disable-bypass-tethering` - Added repo-shipped disable script for fresh installs.
+- `install.sh` - Installed the dashboard, shipped bypass scripts, and aligned dependency/sudoers guidance.
+- `config/config.template`, `config/throttle-me.conf` - Added missing settings and corrected DNS/HL defaults.
+- `docs/QUICKSTART.md`, `docs/DAEMON.md` - Updated install, dashboard, DNS, and sudoers documentation.
+- `PRODUCT_ANALYSIS.md` - Recorded implementation progress against the product-analysis findings.
+- `.gitignore` - Ignored Python dashboard runtime artifacts.
 
 ## Commands Run
 
 ```bash
-ls -la CODEX_HANDOFF.md PROJECT_STATUS_REPORT.md CLAUDE_NOTES.md CODEX_DONE.md
-git status --short
-which scc
-which lizard
-which shellcheck
-bash -n throttle-me
-bash -n throttle-me-daemon
+bash -n throttle-me install.sh scripts/bypass-tethering scripts/disable-bypass-tethering
 for f in lib/*.sh; do bash -n "$f"; done
-bash -n install.sh
-shellcheck throttle-me lib/*.sh
-shellcheck -f json throttle-me lib/*.sh | jq -r 'group_by(.level) | map({level:.[0].level,count:length}) | .[] | "\(.level) \(.count)"'
-shellcheck -f json throttle-me throttle-me-daemon install.sh lib/*.sh | jq -r 'group_by(.level) | map({level:.[0].level,count:length}) | .[] | "\(.level) \(.count)"'
-scc throttle-me throttle-me-daemon install.sh test-theme.sh lib config docs PRD.md --no-cocomo
-scc throttle-me throttle-me-daemon install.sh test-theme.sh lib config docs PRD.md --format json --no-cocomo
-lizard throttle-me throttle-me-daemon install.sh test-theme.sh lib/*.sh
-lizard -C 8 -L 50 throttle-me throttle-me-daemon install.sh test-theme.sh lib/*.sh
+shellcheck scripts/bypass-tethering scripts/disable-bypass-tethering
+uv run --project dashboard throttle-me-dashboard --smoke
+./throttle-me --dashboard-smoke
+uv run --project dashboard --extra test pytest -q
+uv run --project dashboard python -m compileall dashboard/src dashboard/tests
+uv run --project dashboard python - <<'PY'
+from throttle_me_dashboard.app import CommandCenterApp
+import asyncio
+
+async def main():
+    app = CommandCenterApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        for key in ['1', '2', '3', '4', '5', '6', '7', 'r']:
+            await pilot.press(key)
+            await pilot.pause()
+
+asyncio.run(main())
+print('textual headless ok')
+PY
 ./throttle-me -v
 ./throttle-me -p
-./throttle-me -D status
-rg --files -g 'bypass-tethering' -g 'disable-bypass-tethering'
-rg -n "spoo[fF]|User-Agent|user agent|agent" throttle-me lib install.sh config docs PRD.md
-rg -n "BYPASS_SCRIPT|DISABLE_SCRIPT|HL_VALUE|POLL_INTERVAL|HOTSPOT_PATTERNS|SPEED_TEST_TIMEOUT|NOTIFICATION_URGENCY" lib config throttle-me throttle-me-daemon docs PRD.md
+git diff --check -- dashboard throttle-me install.sh lib/config.sh lib/core.sh lib/iptables.sh lib/utils.sh config/config.template config/throttle-me.conf docs/QUICKSTART.md docs/DAEMON.md PRODUCT_ANALYSIS.md scripts .gitignore
+shellcheck throttle-me lib/*.sh
 ```
-
-Also read key source files with `sed`/`nl`, including `PRD.md`, `docs/QUICKSTART.md`, `docs/DAEMON.md`, `throttle-me`, `throttle-me-daemon`, `install.sh`, `lib/*.sh`, and the external scripts at `/home/wtyler/.local/bin/bypass-tethering` and `/home/wtyler/.local/bin/disable-bypass-tethering`.
 
 ## Next Steps
 
-- Fix P0 product-truth gaps first: missing external scripts, config not driving rule behavior, overstated DNS encryption claims, and partial status reporting.
-- Add a non-mutating `doctor` command before expanding bypass techniques.
-- Decide whether to vendor the external scripts or replace them with an app-owned parameterized rule engine.
+- Decide whether to harden the shipped bypass scripts further or replace them with a first-class app-owned rule engine.
+- Add a dedicated `doctor` CLI command that exposes the dashboard diagnostic checks outside the TUI.
+- Address the remaining legacy shellcheck backlog in `throttle-me` and `lib/*.sh`.
 
 ## Blockers (if any)
 
-- No implementation blocker for the analysis.
-- Existing staged files from other work were left untouched. Used a narrow partial commit for only `PRODUCT_ANALYSIS.md` and `CODEX_DONE.md`.
+- Required `shellcheck throttle-me lib/*.sh` still reports the existing repo backlog: 32 warnings, 56 info findings, and 465 style findings. The new shipped bypass scripts pass shellcheck.
 
 ## Handoff Notes
 
-The strongest product finding is that `throttle-me` is a promising alpha but not yet trustworthy enough to call production-ready. It needs a truthful core milestone before feature expansion.
-
-Commit created: `docs: add product analysis`
+The default `throttle-me` experience is now the command-center dashboard. The legacy dialog UI is still available with `throttle-me --classic`, and `throttle-me --dashboard-smoke` provides a non-interactive validation path for CI/headless checks.

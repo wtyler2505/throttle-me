@@ -1,0 +1,27 @@
+#!/bin/bash
+# Disable throttle-me carrier hotspot bypass.
+
+set -euo pipefail
+
+DNS_SERVER="${DNS_SERVER:-1.1.1.1}"
+DNS_BACKUP="${DNS_BACKUP:-/etc/resolv.conf.backup}"
+
+echo "Disabling tethering bypass..."
+echo "  -> Removing TTL / hop-limit modifications"
+sudo iptables -t mangle -F POSTROUTING
+sudo ip6tables -t mangle -F POSTROUTING 2>/dev/null || true
+
+echo "  -> Removing DNS redirections for ${DNS_SERVER}"
+sudo iptables -t nat -D OUTPUT -p udp --dport 53 -j DNAT --to-destination "${DNS_SERVER}:53" 2>/dev/null || true
+sudo iptables -t nat -D OUTPUT -p tcp --dport 53 -j DNAT --to-destination "${DNS_SERVER}:53" 2>/dev/null || true
+sudo ip6tables -t nat -D OUTPUT -p udp --dport 53 -j DNAT --to-destination "${DNS_SERVER}:53" 2>/dev/null || true
+sudo ip6tables -t nat -D OUTPUT -p tcp --dport 53 -j DNAT --to-destination "${DNS_SERVER}:53" 2>/dev/null || true
+
+echo "  -> Restoring DNS configuration"
+sudo chattr -i /etc/resolv.conf 2>/dev/null || true
+if [[ -f "${DNS_BACKUP}" ]]; then
+    sudo cp "${DNS_BACKUP}" /etc/resolv.conf
+    sudo rm "${DNS_BACKUP}"
+fi
+
+echo "Bypass disabled."

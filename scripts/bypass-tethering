@@ -1,0 +1,32 @@
+#!/bin/bash
+# Enable throttle-me carrier hotspot bypass.
+# Values can be overridden by environment variables set by throttle-me.
+
+set -euo pipefail
+
+TTL_VALUE="${TTL_VALUE:-65}"
+HL_VALUE="${HL_VALUE:-${TTL_VALUE}}"
+DNS_SERVER="${DNS_SERVER:-1.1.1.1}"
+DNS_BACKUP="${DNS_BACKUP:-/etc/resolv.conf.backup}"
+
+echo "Setting up tethering bypass..."
+echo "  -> Setting IPv4 TTL to ${TTL_VALUE}"
+sudo iptables -t mangle -F POSTROUTING
+sudo iptables -t mangle -A POSTROUTING -j TTL --ttl-set "${TTL_VALUE}"
+
+echo "  -> Setting IPv6 hop limit to ${HL_VALUE}"
+sudo ip6tables -t mangle -F POSTROUTING 2>/dev/null || true
+sudo ip6tables -t mangle -A POSTROUTING -j HL --hl-set "${HL_VALUE}" 2>/dev/null || true
+
+echo "  -> Redirecting DNS to ${DNS_SERVER}"
+sudo cp /etc/resolv.conf "${DNS_BACKUP}" 2>/dev/null || true
+printf 'nameserver %s\n' "${DNS_SERVER}" | sudo tee /etc/resolv.conf >/dev/null
+sudo chattr +i /etc/resolv.conf 2>/dev/null || true
+
+sudo iptables -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination "${DNS_SERVER}:53" 2>/dev/null || true
+sudo iptables -t nat -A OUTPUT -p tcp --dport 53 -j DNAT --to-destination "${DNS_SERVER}:53" 2>/dev/null || true
+sudo ip6tables -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination "${DNS_SERVER}:53" 2>/dev/null || true
+sudo ip6tables -t nat -A OUTPUT -p tcp --dport 53 -j DNAT --to-destination "${DNS_SERVER}:53" 2>/dev/null || true
+
+echo "Bypass active."
+echo "DNS mode: public resolver redirection on port 53 (not DoH/DoT)."
