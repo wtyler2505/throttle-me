@@ -1,0 +1,11 @@
+# ShellCheck configuration for throttle-me
+# https://www.shellcheck.net/wiki/
+
+# Disable source checking (we source from lib/ dynamically)
+disable=SC1090,SC1091
+
+# Enable all optional checks
+enable=all
+
+# Set shell to bash
+shell=bash

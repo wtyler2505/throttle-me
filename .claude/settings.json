@@ -1,0 +1,178 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "python3 .claude/scripts/context-monitor.py"
+  },
+  "env": {
+    "USE_BUILTIN_RIPGREP": "1",
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "0"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(./throttle-me:*)",
+      "Bash(./throttle-me-daemon:*)",
+      "Bash(./install.sh)",
+      "Bash(./test-theme.sh)",
+      "Bash(bash:*)",
+      "Bash(shellcheck:*)",
+      "Bash(awk:*)",
+      "Bash(sed:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(tr:*)",
+      "Bash(sort:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(cat:*)",
+      "Bash(echo:*)",
+      "Bash(printf:*)",
+      "Bash(ls:*)",
+      "Bash(mktemp:*)",
+      "Bash(stat:*)",
+      "Bash(lsattr:*)",
+      "Bash(timeout:*)",
+      "Bash(sudo timeout:*)",
+      "Bash(sleep:*)",
+      "Bash(bc:*)",
+      "Bash(tee:*)",
+      "Bash(test:*)",
+      "Bash(sudo iptables:*)",
+      "Bash(sudo ip6tables:*)",
+      "Bash(sudo tcpdump:*)",
+      "Bash(sudo lsattr:*)",
+      "Bash(sudo modprobe:*)",
+      "Bash(sudo systemctl:*)",
+      "Bash(sudo chattr:*)",
+      "Bash(sudo cat:*)",
+      "Bash(sudo cp:*)",
+      "Bash(sudo tee /etc/resolv.conf)",
+      "Bash(sudo -v)",
+      "Bash(sudo -n:*)",
+      "Bash(systemctl:*)",
+      "Bash(journalctl:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(jq:*)",
+      "Bash(rg:*)",
+      "Bash(fd:*)",
+      "Bash(scc:*)",
+      "Bash(lizard:*)",
+      "Bash(bat:*)",
+      "Bash(ast-grep:*)",
+      "Bash(curl:*)",
+      "Bash(ip:*)",
+      "Bash(ip6tables:*)",
+      "Bash(iptables:*)",
+      "Bash(nslookup:*)",
+      "Bash(ping:*)",
+      "Bash(lsmod:*)",
+      "Bash(readlink:*)",
+      "Bash(hyperfine:*)",
+      "Read(**/*.sh)",
+      "Read(**/*.md)",
+      "Read(**/*.conf)",
+      "Read(**/*.json)",
+      "Read(**/*.service)",
+      "Read(**/*.template)",
+      "Edit(**/*.sh)",
+      "Edit(**/*.md)",
+      "Edit(**/*.conf)",
+      "Edit(**/*.json)",
+      "Edit(**/*.service)",
+      "Edit(**/*.template)",
+      "Edit(throttle-me)",
+      "Edit(throttle-me-daemon)",
+      "Edit(install.sh)",
+      "Edit(test-theme.sh)",
+      "Write(**/*.sh)",
+      "Write(**/*.md)",
+      "Write(**/*.conf)"
+    ],
+    "deny": [
+      "Read(./.env*)",
+      "Read(./secrets/**)",
+      "Bash(rm -rf:*)",
+      "Bash(sudo rm:*)",
+      "Edit(throttle-me.original)",
+      "Edit(./throttle-me.original)",
+      "Write(throttle-me.original)",
+      "Write(./throttle-me.original)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|MultiEdit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claudekit-hooks run file-guard"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/scripts/guard-original.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/scripts/shellcheck-on-edit.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claudekit-hooks run check-comment-replacement"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claudekit-hooks run check-todos"
+          },
+          {
+            "type": "command",
+            "command": "claudekit-hooks run self-review"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [],
+    "SessionStart": [],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claudekit-hooks run codebase-map"
+          },
+          {
+            "type": "command",
+            "command": "claudekit-hooks run thinking-level"
+          }
+        ]
+      }
+    ]
+  }
+}

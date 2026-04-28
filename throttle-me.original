@@ -1,0 +1,145 @@
+#!/bin/bash
+# throttle-me - TUI for managing carrier hotspot bypass
+# Makes it easy to toggle bypass on/off and check status
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Check if dialog is installed
+if ! command -v dialog &>/dev/null; then
+    echo "Installing dialog..."
+    sudo apt-get update && sudo apt-get install -y dialog
+fi
+
+# Function to check if bypass is active
+check_bypass_status() {
+    local ttl_active=false
+    local dns_active=false
+    local dns_config=""
+
+    # Check TTL rules
+    if sudo iptables -t mangle -L POSTROUTING -n | grep -q "TTL set to 65"; then
+        ttl_active=true
+    fi
+
+    # Check DNS redirection
+    if sudo iptables -t nat -L OUTPUT -n | grep -q "DNAT.*1.1.1.1:53"; then
+        dns_active=true
+    fi
+
+    # Check DNS config
+    if grep -q "1.1.1.1" /etc/resolv.conf 2>/dev/null; then
+        dns_config="Cloudflare (1.1.1.1)"
+    else
+        dns_config="System DNS"
+    fi
+
+    # Get connection info
+    local connection=$(ip route | grep default | awk '{print $3, "via", $5}')
+
+    # Get packet count
+    local packets=$(sudo iptables -t mangle -L POSTROUTING -n -v | grep "TTL set to 65" | awk '{print $1, "packets,", $2}')
+
+    # Build status message
+    local status_msg="=== BYPASS STATUS ===\n\n"
+
+    if [ "$ttl_active" = true ] && [ "$dns_active" = true ]; then
+        status_msg+="Status: ${GREEN}ACTIVE${NC} ✅\n\n"
+    else
+        status_msg+="Status: ${RED}INACTIVE${NC} ❌\n\n"
+    fi
+
+    status_msg+="TTL Modification: "
+    if [ "$ttl_active" = true ]; then
+        status_msg+="${GREEN}Active${NC} (TTL=65)\n"
+    else
+        status_msg+="${RED}Inactive${NC}\n"
+    fi
+
+    status_msg+="DNS Redirection: "
+    if [ "$dns_active" = true ]; then
+        status_msg+="${GREEN}Active${NC}\n"
+    else
+        status_msg+="${RED}Inactive${NC}\n"
+    fi
+
+    status_msg+="DNS Config: $dns_config\n"
+    status_msg+="Connection: $connection\n"
+
+    if [ "$ttl_active" = true ]; then
+        status_msg+="Packets Modified: $packets\n"
+    fi
+
+    echo -e "$status_msg"
+}
+
+# Function to enable bypass
+enable_bypass() {
+    clear
+    echo "🔧 Enabling bypass..."
+
+    if [ -f ~/.local/bin/bypass-tethering ]; then
+        ~/.local/bin/bypass-tethering
+        sleep 2
+    else
+        echo "❌ Error: bypass-tethering script not found in ~/.local/bin/"
+        sleep 3
+    fi
+}
+
+# Function to disable bypass
+disable_bypass() {
+    clear
+    echo "🔧 Disabling bypass..."
+
+    if [ -f ~/.local/bin/disable-bypass-tethering ]; then
+        ~/.local/bin/disable-bypass-tethering
+        sleep 2
+    else
+        echo "❌ Error: disable-bypass-tethering script not found in ~/.local/bin/"
+        sleep 3
+    fi
+}
+
+# Main menu loop
+while true; do
+    choice=$(dialog --clear --backtitle "throttle-me - Carrier Bypass Manager" \
+        --title "Main Menu" \
+        --menu "Choose an option:" 15 60 4 \
+        1 "Enable Bypass (for iPhone hotspot)" \
+        2 "Disable Bypass (for regular WiFi)" \
+        3 "Check Status" \
+        4 "Exit" \
+        3>&1 1>&2 2>&3)
+
+    exit_status=$?
+
+    # Handle ESC or Cancel
+    if [ $exit_status -ne 0 ]; then
+        clear
+        exit 0
+    fi
+
+    case $choice in
+        1)
+            enable_bypass
+            ;;
+        2)
+            disable_bypass
+            ;;
+        3)
+            clear
+            check_bypass_status
+            echo ""
+            read -p "Press Enter to continue..."
+            ;;
+        4)
+            clear
+            exit 0
+            ;;
+    esac
+done

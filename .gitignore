@@ -24,6 +24,9 @@ dashboard/.venv/
 .env
 *.key
 *.pem
+.mcp.json
+credentials*
+*secret*
 
 # Claude Code local settings
 .claude/settings.local.json
