@@ -33,28 +33,90 @@ The mechanics live in two small scripts under `scripts/`. Everything else in thi
 
 ---
 
-## Installation
+## Quick start
 
-### Requirements
+Five steps. Five minutes. Run them in order; don't skip the `sudo -v` in step 5.
+
+### 1. Install the dependencies
+
+On Ubuntu, Debian, or Linux Mint:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y bash iptables dialog figlet git
+```
+
+Optional but recommended:
+
+```bash
+sudo apt-get install -y bmon speedtest-cli
+```
+
+On Fedora/Arch, swap in `dnf install` / `pacman -S` with the same package names.
+
+### 2. Download the repo
+
+```bash
+git clone https://github.com/wtyler2505/throttle-me.git
+cd throttle-me
+```
+
+### 3. Run the installer
+
+```bash
+./install.sh
+```
+
+The installer copies four scripts into `~/.local/bin/`:
+
+| Script | What it does |
+|--------|--------------|
+| `throttle-me` | The TUI/CLI you actually use |
+| `throttle-me-daemon` | Optional auto-toggle when known hotspots appear |
+| `bypass-tethering` | The script that actually adds the iptables rules |
+| `disable-bypass-tethering` | Tears those rules back down |
+
+It also drops a systemd user unit at `~/.config/systemd/user/throttle-me-daemon.service` and seeds a config at `~/.config/throttle-me/config`.
+
+### 4. Make sure `~/.local/bin` is on your PATH
+
+```bash
+which throttle-me
+```
+
+If that prints nothing, add this line to `~/.bashrc` (or `~/.zshrc`) and reload your shell:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### 5. Turn the bypass on
+
+```bash
+sudo -v          # cache your sudo password — see "Known silent-failure modes" #3
+throttle-me -e   # enable bypass
+throttle-me -s   # check it's active
+```
+
+To run a speed test, then turn it off when you're done:
+
+```bash
+throttle-me -t   # before/after speed test
+throttle-me -d   # disable bypass
+```
+
+That's the whole loop. The rest of this README is reference.
+
+---
+
+## Requirements
 
 - Linux (developed on Linux Mint 22.2 / Ubuntu)
 - `bash` 4+, `iptables`, `ip6tables`, `dialog`, `figlet`
 - `sudo` (the bypass needs root for `iptables`)
 - Optional: `bmon` (live monitor), `speedtest-cli` (`-t`), `python3` + `uv` (dashboard)
 
-### One-shot
-
-```bash
-git clone https://github.com/wtyler2505/throttle-me.git
-cd throttle-me
-./install.sh
-```
-
-The installer copies `throttle-me`, `throttle-me-daemon`, and the two bypass scripts into `~/.local/bin/`, drops the systemd unit into `~/.config/systemd/user/`, and seeds a config under `~/.config/throttle-me/`.
-
-### Manual
-
-See `docs/QUICKSTART.md`.
+For a manual (non-installer) walkthrough, see `docs/QUICKSTART.md`.
 
 ---
 
@@ -65,6 +127,8 @@ See `docs/QUICKSTART.md`.
 ```bash
 throttle-me
 ```
+
+Arrow keys + Enter to navigate, Esc to back out.
 
 ### CLI
 
@@ -88,7 +152,7 @@ throttle-me
 ### Verify the bypass is actually working
 
 ```bash
-# TTL on the wire (should be 65 leaving the box)
+# TTL on the wire (should be 65 leaving the box; replace wlo1 with your interface)
 sudo tcpdump -v -i wlo1 -c 5 'tcp port 443' | grep ttl
 
 # Active iptables rules
@@ -99,6 +163,35 @@ sudo iptables -t nat -L OUTPUT -n -v
 The repo also ships two diagnostic skills under `.claude/skills/`:
 - `bypass-diag/` — A/B speed test with bypass on/off, restores prior state
 - `bypass-gap-check/` — checks the three known silent-failure modes below
+
+---
+
+## Using the bypass scripts on their own
+
+`throttle-me` is a wrapper. The actual `iptables` work lives in two small standalone scripts under `scripts/`:
+
+- `scripts/bypass-tethering` — sets `TTL=65`, DNATs port 53 to `1.1.1.1`, points `/etc/resolv.conf` at Cloudflare, and (best-effort) locks it
+- `scripts/disable-bypass-tethering` — undoes all of the above
+
+If you don't want the TUI, daemon, presets, or session tracking, skip `install.sh` and use just the scripts:
+
+```bash
+# Copy them onto your PATH
+cp scripts/bypass-tethering scripts/disable-bypass-tethering ~/.local/bin/
+chmod +x ~/.local/bin/bypass-tethering ~/.local/bin/disable-bypass-tethering
+
+# Cache sudo first — the disable script does NOT prompt for a password and will
+# hang forever in a non-TTY shell otherwise. (See "Known silent-failure modes" #3.)
+sudo -v
+
+# Turn on
+sudo bypass-tethering
+
+# Turn off
+sudo disable-bypass-tethering
+```
+
+Both scripts read env-var overrides (`TTL_VALUE`, `DNS_SERVER`, the interface name, etc.). Open `scripts/bypass-tethering` to see the full list — they're declared at the top.
 
 ---
 
