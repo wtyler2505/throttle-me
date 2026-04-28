@@ -1,0 +1,26 @@
+#!/bin/bash
+# Disable tethering bypass and restore normal settings
+
+echo "🔧 Disabling tethering bypass..."
+
+# Remove TTL modifications
+echo "  → Removing TTL modifications..."
+sudo iptables -t mangle -F POSTROUTING
+sudo ip6tables -t mangle -F POSTROUTING 2>/dev/null
+
+# Remove DNS redirections
+echo "  → Removing DNS redirections..."
+sudo iptables -t nat -D OUTPUT -p udp --dport 53 -j DNAT --to-destination 1.1.1.1:53 2>/dev/null
+sudo iptables -t nat -D OUTPUT -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1:53 2>/dev/null
+sudo ip6tables -t nat -D OUTPUT -p udp --dport 53 -j DNAT --to-destination 1.1.1.1:53 2>/dev/null
+sudo ip6tables -t nat -D OUTPUT -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1:53 2>/dev/null
+
+# Restore original DNS settings
+echo "  → Restoring DNS settings..."
+sudo chattr -i /etc/resolv.conf 2>/dev/null || true
+if [ -f /etc/resolv.conf.backup ]; then
+    sudo cp /etc/resolv.conf.backup /etc/resolv.conf
+    sudo rm /etc/resolv.conf.backup
+fi
+
+echo "✅ Bypass disabled! Normal network settings restored."
