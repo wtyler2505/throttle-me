@@ -1,0 +1,30 @@
+# throttle-me.conf.template — reference for the registry keys the Windows
+# helper service reads from HKLM\SOFTWARE\throttle-me.
+#
+# This file is documentation only — it isn't loaded at runtime. install.ps1
+# creates the registry tree with these defaults; you can change them via
+# `throttle-me -e -TTL 70 -DNS 9.9.9.9` or with regedit.
+#
+# Registry path:
+#   HKEY_LOCAL_MACHINE\SOFTWARE\throttle-me
+#
+# Values:
+#
+#   TTL              REG_DWORD   65          # IPv4 TTL written on outbound packets
+#   HL               REG_DWORD   65          # IPv6 hop-limit written on outbound packets
+#   DNS              REG_SZ      1.1.1.1     # DNS server: traffic on port 53 is DNAT'd here,
+#                                            # and the active adapter's DNS is set to it
+#   Interface        REG_SZ      ""          # adapter alias to use; empty = auto-detect
+#                                            # (must match `Get-NetAdapter | Select Name`)
+#   HotspotPatterns  REG_SZ      "iPhone*;AndroidAP*;*Galaxy*;Mobile Hotspot;*'s iPhone"
+#                                            # semicolon-separated; matched with PowerShell -like
+#
+# To inspect from PowerShell:
+#   Get-ItemProperty 'HKLM:\SOFTWARE\throttle-me'
+#
+# To edit:
+#   throttle-me -e -TTL 70                   (writes TTL on next enable)
+#   Set-ItemProperty 'HKLM:\SOFTWARE\throttle-me' -Name TTL -Value 70 -Type DWord
+#
+# Changes take effect on the next `throttle-me -e` (the helper service reads
+# config at start, not on the fly).

@@ -109,6 +109,12 @@ That's the whole loop. The rest of this README is reference.
 
 ---
 
+## Windows
+
+There's a CLI-parity port under [`windows/`](windows/README.md). Same two-layer mechanism (TTL=65 + DNS DNAT to 1.1.1.1), but built on [WinDivert](https://reqrypt.org/windivert.html) instead of `iptables` — so the bypass toggles instantly with no reboot, matching the Linux UX. A small Go helper runs as a Windows service; a PowerShell CLI drives it. See `windows/README.md` for the build/install walkthrough.
+
+---
+
 ## Requirements
 
 - Linux (developed on Linux Mint 22.2 / Ubuntu)
