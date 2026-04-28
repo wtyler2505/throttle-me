@@ -1,0 +1,97 @@
+name: build-windows-installer
+
+# Builds throttle-me-setup.exe — the single file a non-technical Windows
+# user downloads to install the throttle-me bypass.
+#
+# Triggers:
+#   - Tag push (v*) → builds installer, attaches to a GitHub Release
+#   - Manual dispatch → builds installer, uploads as workflow artifact
+#   - PR touching windows/ → builds installer, uploads as artifact (smoke test)
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'windows/**'
+      - '.github/workflows/build-windows-installer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed for the release-on-tag step
+
+env:
+  WINDIVERT_VERSION: '2.2.2'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: windows/helper/go.sum
+
+      - name: Download WinDivert ${{ env.WINDIVERT_VERSION }}
+        shell: pwsh
+        run: |
+          $ver = '${{ env.WINDIVERT_VERSION }}'
+          $url = "https://github.com/basil00/WinDivert/releases/download/v$ver/WinDivert-$ver-A.zip"
+          Write-Host "Downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile WinDivert.zip
+          Expand-Archive WinDivert.zip -DestinationPath WinDivert
+          $src = "WinDivert\WinDivert-$ver-A\x64"
+          $dst = "windows\vendor\windivert\x64"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item -Force "$src\WinDivert.dll"   $dst
+          Copy-Item -Force "$src\WinDivert64.sys" $dst
+          if (Test-Path "$src\WinDivert.lib") { Copy-Item -Force "$src\WinDivert.lib" $dst }
+          Get-ChildItem $dst
+
+      - name: Build helper service
+        shell: pwsh
+        working-directory: windows/helper
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: |
+          New-Item -ItemType Directory -Force -Path bin | Out-Null
+          go build -trimpath -ldflags '-s -w' -o bin\throttle-me-helper.exe .
+          Copy-Item -Force ..\vendor\windivert\x64\WinDivert.dll   bin\
+          Copy-Item -Force ..\vendor\windivert\x64\WinDivert64.sys bin\
+          Get-ChildItem bin
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          # Inno Setup 6 ships preinstalled on the windows-latest runner.
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            Write-Host "Installing Inno Setup via Chocolatey (runner image is missing it)"
+            choco install -y --no-progress innosetup
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          & $iscc windows\installer\throttle-me.iss
+          Get-ChildItem windows\installer\Output
+
+      - name: Upload installer as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: throttle-me-setup
+          path: windows/installer/Output/throttle-me-setup.exe
+          if-no-files-found: error
+
+      - name: Attach installer to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: windows/installer/Output/throttle-me-setup.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false

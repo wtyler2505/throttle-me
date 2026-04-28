@@ -9,10 +9,51 @@ instead of `iptables`.
 
 ---
 
-## Quick start
+## I just want to use it (no command line, no Go, no nothing)
 
-You need to do the build/install once (admin). After that, day-to-day use
-runs unelevated from any cmd or PowerShell window.
+This is the path for a non-technical user. Two clicks to install, one click
+per use.
+
+### 1. Download
+
+Go to **[Releases](https://github.com/wtyler2505/throttle-me/releases/latest)**
+and download `throttle-me-setup.exe`.
+
+### 2. Install
+
+Double-click `throttle-me-setup.exe`. Windows will:
+
+- Show a SmartScreen warning the first time (not yet code-signed).
+  Click **More info → Run anyway**.
+- Show a UAC prompt asking for admin. Click **Yes**.
+- Walk you through a normal Windows installer wizard. Click **Next**, **Install**.
+
+Optional: tick **"Create desktop shortcuts"** on the Tasks page if you want
+big easy buttons on your desktop.
+
+### 3. Use it
+
+Open the Start Menu and type **"Throttle"**. You'll see three shortcuts:
+
+| Shortcut | What it does |
+|----------|--------------|
+| **Throttle Me — Turn ON** | Enables the bypass. A small popup appears and disappears on its own. |
+| **Throttle Me — Turn OFF** | Disables the bypass. Same brief popup. |
+| **Throttle Me — Status** | Shows whether the bypass is currently ON or OFF. |
+
+Click **Turn ON** when you connect to your hotspot. Click **Turn OFF** when
+you're done. That's the whole thing — no command line ever needed.
+
+> **Why no popup notification?** Modern Windows toast notifications need an
+> app identity that we don't have yet. The popup shown here is a small system
+> message box that auto-closes after 2 seconds — it's intentional, not a bug.
+
+---
+
+## I want the CLI / I want to build from source
+
+Everything below is for developers and power users. Skip this section if
+you used the installer above.
 
 ### 1. Install the prereqs
 
@@ -21,6 +62,7 @@ runs unelevated from any cmd or PowerShell window.
 | Go 1.22+ | Build the helper service | https://go.dev/dl/ |
 | PowerShell 5.1+ | Run the CLI and installer | Built-in on Windows 10/11 |
 | WinDivert 2.x | Kernel packet filter | https://reqrypt.org/windivert.html |
+| Inno Setup 6 (optional) | Build the .exe installer | https://jrsoftware.org/isdl.php |
 
 ### 2. Drop the WinDivert binaries in place
 
@@ -47,7 +89,17 @@ cd windows\helper
 This produces `helper\bin\throttle-me-helper.exe` plus the WinDivert runtime
 files copied next to it.
 
-### 4. Install (one-time, admin)
+### 4a. Build the .exe installer (optional, lets you make a release)
+
+```powershell
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows\installer\throttle-me.iss
+```
+
+Output: `windows\installer\Output\throttle-me-setup.exe`. This is exactly
+what the CI workflow under `.github/workflows/build-windows-installer.yml`
+produces for tagged releases.
+
+### 4b. Or install from source (no .exe installer)
 
 Open an **elevated** PowerShell:
 
@@ -64,7 +116,7 @@ This:
 - adds `C:\Program Files\throttle-me` to the system `PATH`
 - seeds default config under `HKLM\SOFTWARE\throttle-me`
 
-### 5. Use it
+### 5. Use it from the CLI
 
 Open a **fresh** cmd or PowerShell (so it picks up the new PATH):
 

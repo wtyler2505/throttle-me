@@ -111,7 +111,11 @@ That's the whole loop. The rest of this README is reference.
 
 ## Windows
 
-There's a CLI-parity port under [`windows/`](windows/README.md). Same two-layer mechanism (TTL=65 + DNS DNAT to 1.1.1.1), but built on [WinDivert](https://reqrypt.org/windivert.html) instead of `iptables` — so the bypass toggles instantly with no reboot, matching the Linux UX. A small Go helper runs as a Windows service; a PowerShell CLI drives it. See `windows/README.md` for the build/install walkthrough.
+Same two-layer mechanism (TTL=65 + DNS DNAT to 1.1.1.1), built on [WinDivert](https://reqrypt.org/windivert.html) instead of `iptables` — bypass toggles instantly with no reboot, matching the Linux UX.
+
+**For non-technical users:** download `throttle-me-setup.exe` from the [latest release](https://github.com/wtyler2505/throttle-me/releases/latest), double-click, click through the wizard. After install, use the **Throttle Me — Turn ON / Turn OFF** shortcuts in the Start Menu. No command line involved.
+
+**For developers / from source:** see [`windows/README.md`](windows/README.md) for the build/install walkthrough (Go + WinDivert + PowerShell CLI parity with the Linux flags).
 
 ---
 
