@@ -99,14 +99,35 @@ log_info "Daemon started (PID: $$)"
 log_debug "Previous daemon check timestamp: ${last_check}"
 daemon_notify normal "Daemon Started" "Monitoring for mobile hotspots" "dialog-information"
 
-# Detect wireless interface
-iface=$(detect_wireless_interface) || {
-    log_error "No wireless interface detected"
+# Detect wireless interface. At login this daemon starts before NetworkManager has brought the
+# adapter up, so the original code logged an error and exited; systemd restarted it, it died again,
+# and the bypass stayed off until a command was typed by hand (found 2026-09-17, three deaths in the
+# boot log). Wait for one instead of dying.
+iface=""
+for _attempt in $(seq 1 60); do
+    iface=$(detect_wireless_interface 2>/dev/null) && [[ -n "${iface}" ]] && break
+    iface=""
+    sleep 2
+done
+if [[ -z "${iface}" ]]; then
+    log_error "No wireless interface appeared after two minutes"
     daemon_notify critical "Daemon Error" "No wireless interface found" "dialog-error"
     exit 1
-}
+fi
 
 log_info "Monitoring interface: ${iface}"
+
+# The saved state survives a reboot but the firewall rules do not, so a restored "BYPASS_ACTIVE=true"
+# made the daemon believe there was nothing to do on a fresh boot. Trust the rules, not the note.
+if is_bypass_active; then
+    bypass_active="true"
+else
+    if [[ "${bypass_active}" == "true" ]]; then
+        log_info "Saved state said the bypass was on, but no rules are present (reboot); correcting"
+    fi
+    bypass_active="false"
+    last_ssid=""
+fi
 
 # Main monitoring loop
 while true; do
