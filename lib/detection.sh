@@ -8,6 +8,19 @@ set -euo pipefail
 is_mobile_hotspot() {
     local ssid=$1
 
+    # 2026-09-17: honor HOTSPOT_PATTERNS from the config (space-separated shell globs). The built-in
+    # list below never read it, so a Pixel hotspot was "not a hotspot" whatever the config said.
+    local -a user_patterns=()
+    read -r -a user_patterns <<< "${CONFIG[HOTSPOT_PATTERNS]:-}"
+    local user_pattern
+    for user_pattern in "${user_patterns[@]}"; do
+        # shellcheck disable=SC2053
+        if [[ "${ssid}" == ${user_pattern} ]]; then
+            log_debug "SSID '${ssid}' matches configured hotspot pattern: ${user_pattern}"
+            return 0
+        fi
+    done
+
     # Common mobile hotspot patterns
     local patterns=(
         "iPhone"

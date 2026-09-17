@@ -16,10 +16,15 @@ enable_bypass() {
         return 1
     fi
     
-    # Check if already active
-    if is_bypass_active; then
+    # Check if already active (2026-09-17: rc 2 means the check itself could not run, e.g. under
+    # the daemon with no terminal; then run the script anyway -- it is idempotent)
+    local rc=0
+    is_bypass_active || rc=$?
+    if [[ ${rc} -eq 0 ]]; then
         log_warn "Bypass is already active"
         return 0
+    elif [[ ${rc} -eq 2 ]]; then
+        log_warn "could not read the current rules (no root without a terminal); enabling anyway"
     fi
     
     # Execute bypass script
@@ -52,10 +57,15 @@ disable_bypass() {
         return 1
     fi
     
-    # Check if already inactive
-    if ! is_bypass_active; then
+    # Check if already inactive (2026-09-17: rc 2 = could not check; run the disable script anyway,
+    # it only removes its own tagged rules and is safe when there are none)
+    local rc=0
+    is_bypass_active || rc=$?
+    if [[ ${rc} -eq 1 ]]; then
         log_warn "Bypass is already inactive"
         return 0
+    elif [[ ${rc} -eq 2 ]]; then
+        log_warn "could not read the current rules (no root without a terminal); disabling anyway"
     fi
     
     # End session tracking before disabling

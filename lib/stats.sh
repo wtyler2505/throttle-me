@@ -29,13 +29,14 @@ start_session() {
     ipv4_packets=$(sudo iptables -t mangle -L POSTROUTING -n -v 2>/dev/null | grep "TTL set to" | awk '{print $1}' | head -1 || echo "0")
     ipv6_packets=$(sudo ip6tables -t mangle -L POSTROUTING -n -v 2>/dev/null | grep "HL set to" | awk '{print $1}' | head -1 || echo "0")
 
-    # Store session start info
+    # Store session start info (values quoted: an unquoted "YYYY-MM-DD HH:MM:SS" made `source` run
+    # the time of day as a command, 2026-09-17)
     cat > "${CURRENT_SESSION_FILE}" << EOF
-START_TIME=${timestamp}
-START_IPV4_PACKETS=${ipv4_packets}
-START_IPV6_PACKETS=${ipv6_packets}
-TTL=${CONFIG[TTL_VALUE]}
-DNS=${CONFIG[DNS_SERVER]}
+START_TIME="${timestamp}"
+START_IPV4_PACKETS="${ipv4_packets:-0}"
+START_IPV6_PACKETS="${ipv6_packets:-0}"
+TTL="${CONFIG[TTL_VALUE]}"
+DNS="${CONFIG[DNS_SERVER]}"
 EOF
 
     log_debug "Session started at ${timestamp}"
@@ -63,8 +64,8 @@ end_session() {
 
     # Calculate session totals
     local ipv4_total ipv6_total
-    ipv4_total=$((ipv4_packets_end - START_IPV4_PACKETS))
-    ipv6_total=$((ipv6_packets_end - START_IPV6_PACKETS))
+    ipv4_total=$(( ${ipv4_packets_end:-0} - ${START_IPV4_PACKETS:-0} ))
+    ipv6_total=$(( ${ipv6_packets_end:-0} - ${START_IPV6_PACKETS:-0} ))
 
     # Calculate duration
     local start_epoch end_epoch duration

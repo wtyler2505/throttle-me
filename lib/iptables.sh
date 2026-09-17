@@ -5,8 +5,14 @@
 set -euo pipefail
 
 # Check if IPv4 TTL bypass rule is active
+# 2026-09-17: `sudo -n` so a caller with no terminal (the daemon) fails fast instead of trying to
+# prompt; rc 2 = could not check (no root available), distinct from rc 1 = checked, not active.
+_ipt_list() { sudo -n "$@" 2>/dev/null || return 2; }
+
 is_ttl_active() {
-    sudo iptables -t mangle -L POSTROUTING -n | grep -q "TTL set to ${CONFIG[TTL_VALUE]}"
+    local out
+    out=$(_ipt_list iptables -t mangle -L POSTROUTING -n) || return 2
+    grep -q "TTL set to ${CONFIG[TTL_VALUE]}" <<< "${out}"
 }
 
 # Check if IPv6 Hop Limit bypass rule is active
@@ -16,7 +22,9 @@ is_ipv6_hl_active() {
 
 # Check if IPv4 DNS redirection is active
 is_dns_active() {
-    sudo iptables -t nat -L OUTPUT -n | grep -q "DNAT.*${CONFIG[DNS_SERVER]}:53"
+    local out
+    out=$(_ipt_list iptables -t nat -L OUTPUT -n) || return 2
+    grep -q "DNAT.*${CONFIG[DNS_SERVER]}:53" <<< "${out}"
 }
 
 # Check if IPv6 DNS redirection is active
@@ -40,7 +48,12 @@ get_ipv6_hl_packet_count() {
 
 # Check if bypass is fully active
 is_bypass_active() {
-    is_ttl_active && is_dns_active
+    # 0 = active, 1 = not active, 2 = could not check
+    local rc=0
+    is_ttl_active || rc=$?
+    [[ ${rc} -eq 2 ]] && return 2
+    [[ ${rc} -ne 0 ]] && return 1
+    is_dns_active
 }
 
 # Check whether /etc/resolv.conf is immutable. Use -L so symlink targets are tested.
