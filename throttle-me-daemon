@@ -117,71 +117,91 @@ fi
 
 log_info "Monitoring interface: ${iface}"
 
-# The saved state survives a reboot but the firewall rules do not, so a restored "BYPASS_ACTIVE=true"
-# made the daemon believe there was nothing to do on a fresh boot. Trust the rules, not the note.
-if is_bypass_active; then
-    bypass_active="true"
-else
-    if [[ "${bypass_active}" == "true" ]]; then
-        log_info "Saved state said the bypass was on, but no rules are present (reboot); correcting"
-    fi
-    bypass_active="false"
-    last_ssid=""
-fi
+# How the loop decides (rewritten 2026-09-17 evening, after an afternoon of it failing quietly):
+#
+#   The old loop was edge-triggered: it made one decision at the instant the network name changed,
+#   and never looked again. If the hotspot check failed at that instant (the adapter is still
+#   settling during a switch), the bypass stayed wrong until the next switch. That is exactly what
+#   happened: 14:47 joining the work iPhone and 19:22 rejoining the Pixel both went unhandled.
+#   It also kept the patterns from startup, so adding a hotspot name meant nothing until a restart,
+#   and a startup "check the real rules" step called a function this daemon never loads.
+#
+#   Now it is level-triggered: every pass it asks "which network am I on, and should the bypass be
+#   on for it", and it re-applies the bypass on a hotspot at least once a minute. The bypass script
+#   is idempotent (it only adds rules that are missing), so re-applying is safe and cheap, and it
+#   repairs a reboot, a flapping switch, or rules removed by hand. The config is re-read whenever the
+#   file changes. This daemon cannot read the firewall without a password, so it never pretends to.
+REAPPLY_SECONDS=60
+bypass_active="unknown"
+last_ssid=""
+last_apply=0
+config_stamp=""
 
-# Main monitoring loop
+apply_bypass() {
+    TTL_VALUE="${CONFIG[TTL_VALUE]}" HL_VALUE="${CONFIG[HL_VALUE]:-${CONFIG[TTL_VALUE]}}" \
+        DNS_SERVER="${CONFIG[DNS_SERVER]}" "${CONFIG[BYPASS_SCRIPT]}" >/dev/null 2>&1
+}
+
+remove_bypass() {
+    DNS_SERVER="${CONFIG[DNS_SERVER]}" "${CONFIG[DISABLE_SCRIPT]}" >/dev/null 2>&1
+}
+
 while true; do
-    # Get current SSID
+    stamp=$(stat -c %Y "${CONFIG_FILES[0]}" 2>/dev/null || echo "")
+    if [[ "${stamp}" != "${config_stamp}" ]]; then
+        [[ -n "${config_stamp}" ]] && log_info "Config changed; reloading (patterns: ${HOTSPOT_PATTERNS:-default})"
+        load_config >/dev/null 2>&1 || true
+        config_stamp="${stamp}"
+    fi
+
     current_ssid=$(get_current_ssid "${iface}" 2>/dev/null || echo "")
-    
-    # Check if SSID changed
+    now=$(date +%s)
+
     if [[ "${current_ssid}" != "${last_ssid}" ]]; then
         log_info "SSID changed: '${last_ssid}' → '${current_ssid}'"
-        
-        # Empty SSID means disconnected
-        if [[ -z "${current_ssid}" ]]; then
-            if [[ "${bypass_active}" == "true" ]]; then
-                log_info "Disconnected from network - disabling bypass"
-                "${SCRIPT_DIR}/throttle-me" -d 2>/dev/null || true
-                bypass_active="false"
-                daemon_notify low "Bypass Disabled" "Disconnected from network" "network-wireless-offline"
-            fi
-        else
-            # Check if AUTO_ENABLE is enabled
-            if [[ "${CONFIG[AUTO_ENABLE]}" == "true" ]]; then
-                # Check if current network is a mobile hotspot
-                if ssid_result=$(detect_hotspot_connection 2>/dev/null); then
-                    # Mobile hotspot detected
-                    if [[ "${bypass_active}" != "true" ]]; then
-                        log_info "Hotspot detected: ${ssid_result} - enabling bypass"
-                        "${SCRIPT_DIR}/throttle-me" -e 2>/dev/null || {
-                            log_error "Failed to enable bypass"
-                            daemon_notify critical "Bypass Error" "Failed to enable bypass" "dialog-error"
-                        }
-                        bypass_active="true"
-                        daemon_notify normal "Bypass Enabled" "Connected to ${ssid_result}" "network-wireless-hotspot"
-                    fi
-                else
-                    # Regular WiFi network
-                    if [[ "${bypass_active}" == "true" ]]; then
-                        log_info "Regular WiFi: ${current_ssid} - disabling bypass"
-                        "${SCRIPT_DIR}/throttle-me" -d 2>/dev/null || {
-                            log_error "Failed to disable bypass"
-                            daemon_notify critical "Bypass Error" "Failed to disable bypass" "dialog-error"
-                        }
-                        bypass_active="false"
-                        daemon_notify low "Bypass Disabled" "Connected to ${current_ssid}" "network-wireless"
-                    fi
+    fi
+
+    if [[ -z "${current_ssid}" ]]; then
+        want="off"
+    elif [[ "${CONFIG[AUTO_ENABLE]}" != "true" ]]; then
+        want="leave"
+    elif is_mobile_hotspot "${current_ssid}"; then
+        want="on"
+    else
+        want="off"
+    fi
+
+    if [[ "${want}" == "on" ]]; then
+        if [[ "${bypass_active}" != "true" || "${current_ssid}" != "${last_ssid}" \
+              || $(( now - last_apply )) -ge ${REAPPLY_SECONDS} ]]; then
+            if apply_bypass; then
+                if [[ "${bypass_active}" != "true" || "${current_ssid}" != "${last_ssid}" ]]; then
+                    log_info "Hotspot ${current_ssid}: bypass on"
+                    daemon_notify normal "Bypass Enabled" "Connected to ${current_ssid}" "network-wireless-hotspot"
                 fi
+                bypass_active="true"
+                last_apply=${now}
             else
-                log_debug "AUTO_ENABLE is disabled - skipping bypass management"
+                log_error "Hotspot ${current_ssid}: bypass script failed; retrying next pass"
+                bypass_active="false"
             fi
         fi
-        
+    elif [[ "${want}" == "off" && "${bypass_active}" != "false" ]]; then
+        if remove_bypass; then
+            log_info "${current_ssid:-No network}: bypass off"
+            [[ "${bypass_active}" == "true" ]] && \
+                daemon_notify low "Bypass Disabled" "${current_ssid:-Disconnected}" "network-wireless"
+            bypass_active="false"
+        else
+            log_error "${current_ssid:-No network}: disable script failed; retrying next pass"
+        fi
+    fi
+
+    # persist whenever the network or the bypass state changes, so the file never lies about either
+    if [[ "${current_ssid}" != "${last_ssid}" || "${bypass_active}" != "${saved_bypass:-}" ]]; then
         last_ssid="${current_ssid}"
+        saved_bypass="${bypass_active}"
         save_state
     fi
-    
-    # Sleep before next check
     sleep "${POLL_INTERVAL}"
 done

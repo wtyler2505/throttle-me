@@ -75,7 +75,7 @@ INTERFACE_OVERRIDE=""
 # Known mobile hotspot SSID patterns (space-separated)
 # Daemon will auto-enable bypass when connecting to these
 # Supports wildcards: "Tyler's iPhone" "iPhone*" "AndroidAP*"
-HOTSPOT_PATTERNS="iPhone* AndroidAP* *Galaxy*"
+HOTSPOT_PATTERNS="iPhone* AndroidAP* *Galaxy* Pixel* ADE-*"
 
 # ==============================================================================
 # ADVANCED SETTINGS

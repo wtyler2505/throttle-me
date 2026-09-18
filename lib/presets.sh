@@ -72,8 +72,26 @@ load_preset() {
     local preset_name=$1
     local preset_file="${PRESET_DIR}/${preset_name}.conf"
 
+    # 2026-09-17: the shipped defaults were never created by any install path, so every `-l` failed,
+    # and the help text's own example (`-l "iPhone"`) could never match the lowercase iphone.conf.
+    # Create the defaults on first use, and match names case-insensitively.
+    ensure_preset_dir
+    if ! compgen -G "${PRESET_DIR}/*.conf" >/dev/null; then
+        create_default_presets
+    fi
     if [[ ! -f "${preset_file}" ]]; then
-        log_error "Preset '${preset_name}' not found"
+        local candidate lower
+        lower=$(printf '%s' "${preset_name}" | tr '[:upper:]' '[:lower:]')
+        for candidate in "${PRESET_DIR}"/*.conf; do
+            if [[ "$(basename "${candidate}" .conf | tr '[:upper:]' '[:lower:]')" == "${lower}" ]]; then
+                preset_file="${candidate}"
+                break
+            fi
+        done
+    fi
+
+    if [[ ! -f "${preset_file}" ]]; then
+        log_error "Preset '${preset_name}' not found (have: $(basename -a "${PRESET_DIR}"/*.conf 2>/dev/null | sed 's/\.conf$//' | tr '\n' ' '))"
         return 1
     fi
 
@@ -136,10 +154,10 @@ CONFIRM_ENABLE=true
 CONFIRM_DISABLE=true
 EOF
 
-    # Android preset (TTL=64)
+    # Android preset (TTL=65: the phone decrements once, same as an iPhone)
     cat > "${PRESET_DIR}/android.conf" << 'EOF'
-# Android Preset - Standard TTL for Android devices
-TTL_VALUE=64
+# Android Preset - the phone decrements TTL once, so 65 arrives as 64
+TTL_VALUE=65
 DNS_SERVER="1.1.1.1"
 BYPASS_SCRIPT="$HOME/.local/bin/bypass-tethering"
 DISABLE_SCRIPT="$HOME/.local/bin/disable-bypass-tethering"
